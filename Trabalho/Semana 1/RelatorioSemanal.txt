@@ -1,0 +1,13 @@
+Relatório semanal
+
+Relatar O QUE FOI FEITO:
+- Todos da equipe já estão com a ferramenta.
+- Otávio está criando os personagem infectados.
+- Richard está criando as fases.
+- Douglas está se inteirando de como fazer a parte de programação.
+
+
+Relatar QUEM FOI O RESPONSÁVEL
+- Richard responsável pelas fases.
+- Otávio pelos personagens.
+- Douglas pela programação.
