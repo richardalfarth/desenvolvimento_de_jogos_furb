@@ -1,7 +1,7 @@
--- title:  Fuga das sombras
--- author: Douglas Eduardo Bauler
--- desc: RPG acao 2s
--- script: lua
+-- title:  Coronga;
+-- author: Douglas, Richard e Otavio;
+-- desc: RPG acao 2d;
+-- script: lua.
 
 local CELL = 8
 local DRAW_X = 120
@@ -58,9 +58,8 @@ local function is_collision(point)
 end
 
 local function make_collision_player_with_objects(index)
-	local obj = Objects[index]
 	player.keys = player.keys + 1
-	table.remove(Objects, index)
+	table.remove(Keys, index)
 
   return false
 end
@@ -85,7 +84,7 @@ end
 local function make_collision_player_with_door(index)
 	if player.keys > 0 then
 	  player.keys = player.keys - 1
-    table.remove(Objects, index)
+    table.remove(Keys, index)
 
 		return false
 	end
@@ -94,9 +93,21 @@ local function make_collision_player_with_door(index)
 end
 
 local function check_collision_objects(personal, newPosition)
-	for i, obj in pairs(Objects) do
-	  if is_collision_objects(newPosition, obj) then
-		  return obj.make_collisions[personal.type](i)
+	for i, enemy in pairs(Enemies) do
+	  if is_collision_objects(newPosition, enemy) then
+		  return enemy.make_collisions[personal.type](i)
+		end
+	end
+
+	for i, key in pairs(Keys) do
+	  if is_collision_objects(newPosition, key) then
+		  return key.make_collisions[personal.type](i)
+		end
+	end
+
+	for i, door in pairs(Doors) do
+	  if is_collision_objects(newPosition, door) then
+		  return door.make_collisions[personal.type](i)
 		end
 	end
 
@@ -116,13 +127,19 @@ local function update_game()
 
 	check_collision_objects(player, player)
 
-	for i, obj in pairs(Objects) do
-		if obj.type == Constants.ENEMY then
-      obj.update(obj)
-		end
+	for i, enemy in pairs(Enemies) do
+    enemy.update()
 	end
 
-  cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
+	for i, key in pairs(Keys) do
+    key.update()
+	end
+
+	for i, door in pairs(Doors) do
+    door.update()
+	end
+
+	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
   cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
 end
 
@@ -149,7 +166,7 @@ local function make_collision_enemy_with_door(index)
 end
 
 local function make_collision_enemy_with_sword(index)
-	table.remove(Objects, index)
+	table.remove(Enemies, index)
 	return false
 end
 
@@ -157,7 +174,7 @@ local function final_match()
 	window = Window.END_GAME
 end
 
--- Base class
+-- Base class --
 local function Base()
 	local base = {
 		type = nil,
@@ -221,11 +238,11 @@ local function Base()
 end
 
 -- Door class --
-local function Door(p_x, p_y)
+local function Door(x, y)
 	local door = Base()
 	door.sprite = Constants.SPRITE_DOOR
-	door.x = p_x * CELL
-	door.y =	p_y * CELL
+	door.x = x
+	door.y =	y
 	door.make_collisions = {
 	  ENEMY = make_collision_enemy_with_door,
 		PLAYER = make_collision_player_with_door,
@@ -233,16 +250,36 @@ local function Door(p_x, p_y)
 	}
 	door.visible = true
 
+	function door.draw()
+		if door.visible then
+			spr(
+				door.sprite,
+				cam.x + door.x,
+				cam.y + door.y,
+				door.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
+
+	function door.update()
+		return true
+	end
+
 	return door
 end
 
 -- Key class --
-local function Key(p_x, p_y)
+local function Key(x, y)
 	local key = Base()
 	key.type = Constants.KEY
 	key.sprite = Constants.SPRITE_KEY
-	key.x = p_x * CELL
-	key.y =	p_y * CELL
+	key.x = x
+	key.y =	y
 	key.make_collisions = {
 		ENEMY = function() return false end,
 		PLAYER = make_collision_player_with_objects,
@@ -250,17 +287,37 @@ local function Key(p_x, p_y)
 	}
 	key.visible = true
 
+	function key.draw()
+		if key.visible then
+			spr(
+				key.sprite,
+				cam.x + key.x,
+				cam.y + key.y,
+				key.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
+
+	function key.update()
+		return true
+	end
+
 	return key
 end
 
 -- Enemy class --
-local function Enemy(p_x, p_y)
+local function Enemy(x, y)
 	local enemy = Base()
 	enemy.type = Constants.ENEMY
 	enemy.sprite = Constants.SPRITE_ENEMY
 	enemy.state = States.STOP
-	enemy.x = p_x * CELL
-	enemy.y =	p_y * CELL
+	enemy.x = x
+	enemy.y =	y
 	enemy.background = 14
 	enemy.animation = 1
 	enemy.make_collisions = {
@@ -269,6 +326,22 @@ local function Enemy(p_x, p_y)
 		SWORD = make_collision_enemy_with_sword
 	}
 	enemy.visible = true
+
+	function enemy.draw()
+		if enemy.visible then
+			spr(
+				enemy.sprite,
+				cam.x + enemy.x,
+				cam.y + enemy.y,
+				enemy.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
 
 	function enemy.update()
 		if distancy(enemy, player) < Constants.VIEW_ENEMY then
@@ -322,11 +395,11 @@ local function Enemy(p_x, p_y)
 end
 
 -- Sword class --
-local function Sword(p_x, p_y)
+local function Sword(x, y)
 	local sword = Base()
 	sword.type = Constants.SWORD
-	sword.x = p_x + CELL
-	sword.y = p_y + CELL
+	sword.x = x
+	sword.y = y
 	sword.background = 0
 	sword.animation = 1
 	sword.make_collisions = {
@@ -336,6 +409,22 @@ local function Sword(p_x, p_y)
 	}
 	sword.visible = false
 	sword.timeout = 0
+
+	function sword.draw()
+		if sword.visible then
+			spr(
+				sword.sprite,
+				cam.x + sword.x,
+				cam.y + sword.y,
+				sword.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
 
 	function sword.update()
 		local data_sword = {
@@ -378,12 +467,12 @@ local function Sword(p_x, p_y)
 end
 
 -- Player class --
-local function Player(sword)
+local function Player(x, y, sword)
 	local player = Base()
 	player.type = Constants.PLAYER
 	player.sprite = Constants.SPRITE_PLAYER
-	player.x = 500
-	player.y = 800
+	player.x = x
+	player.y = y
 	player.animation = 1
 	player.keys = 0
 	player.sword = sword
@@ -450,20 +539,18 @@ local function draw_map()
 end
 
 local function draw_objects()
-	for i, obj in pairs(Objects) do
-		if obj.visible then
-			spr(
-				obj.sprite,
-				cam.x + obj.x,
-				cam.y + obj.y,
-				obj.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
+	player.sword.draw()
+
+	for i, enemy in pairs(Enemies) do
+		enemy.draw()
+	end
+
+	for i, key in pairs(Keys) do
+		key.draw()
+	end
+
+	for i, door in pairs(Doors) do
+		door.draw()
 	end
 end
 
@@ -494,33 +581,49 @@ local function draw_game()
 end
 
 function initialize()
-	Objects = {}
+	Enemies = {}
+	Keys = {}
+	Doors = {}
 
 	cam = {
 		x = 0,
 		y = 0
 	}
 
-	local objects = {
+	local enemies = {
 		{x = 26, y = 15, create = Enemy},
 		{x = 45, y = 13, create = Enemy},
 		{x = 5, y = 2, create = Enemy},
 		{x = 4, y = 13, create = Enemy},
 		{x = 26, y = 2, create = Enemy},
+		{x = 580, y = 800, create = Enemy}
+	}
+
+	local keys = {
 		{x = 3, y = 3, create = Key},
-		{x = 25, y = 23, create = Key},
+		{x = 25, y = 23, create = Key}
+	}
+
+	local doors = {
 		{x = 17, y = 7, create = Door},
 		{x = 48, y = 13, create = Door}
 	}
 
-	for i, obj in pairs(objects) do
-		table.insert(Objects, obj.create(obj.x, obj.y))
+	for i, enemy in pairs(enemies) do
+		table.insert(Enemies, enemy.create(enemy.x, enemy.y))
+	end
+
+	for i, key in pairs(keys) do
+		table.insert(Keys, key.create(key.x, key.y))
+	end
+
+	for i, door in pairs(doors) do
+		table.insert(Doors, door.create(door.x, door.y))
 	end
 
 	local sword_init = Sword(0, 0)
-	table.insert(Objects, sword_init)
 
-	player = Player(sword_init)
+	player = Player(500, 800, sword_init)
 
 	end_game = {
 		sprite = Constants.SPRITE_END_GAME,
@@ -534,7 +637,6 @@ function initialize()
 			SWORD = function() return false end
 		}
 	}
-	table.insert(Objects, end_game)
 end
 
 local function update_window_final()
