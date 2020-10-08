@@ -1,7 +1,11 @@
--- title:  Fuga das sombras
--- author: Douglas Eduardo Bauler
--- desc: RPG acao 2s
--- script: lua
+-- title:  Coronga;
+-- author: Douglas, Richard e Otavio;
+-- desc: RPG acao 2d;
+-- script: lua.
+
+local CELL = 8
+local DRAW_X = 120
+local DRAW_Y = 64
 
 local States = {
 	STOP = "STOP",
@@ -10,10 +14,7 @@ local States = {
 
 local Constants = {
 	VIEW_ENEMY = 58,
-	TIMEOUT_NEXT_WINDOW = 45,
 
-	WIDTH_WINDOW = 240,
-	HEIGHT_WINDOW = 138,
 	SPEED_ANIMATION = 0.1,
 
 	SPRITE_PLAYER = 260,
@@ -50,36 +51,29 @@ local Constants = {
 }
 
 local function is_collision(point)
-	return mget(point.x / 8, point.y / 8) >= 128
+	return mget(
+		(point.x / CELL) + (CELL * 2),
+		(point.y / CELL) + (CELL + 1)
+	) >= 128
 end
 
 local function make_collision_player_with_objects(index)
-	local obj = Objects[index]
 	player.keys = player.keys + 1
-
-	table.remove(Objects, index)
-	sfx(
-		Constants.ID_SFX_CHAVE,
-		60,
-		32,
-		0,
-		8,
-		1
-	)
+	table.remove(Keys, index)
 
   return false
 end
 
 local function is_collision_objects(objectA, objectB)
-	local leftForA = objectA.x + 8
-	local rightForA = objectA.x - 8
-	local underForA = objectA.y + 8
-	local upForA = objectA.y - 8
+	local leftForA = objectA.x + CELL
+	local rightForA = objectA.x - CELL
+	local underForA = objectA.y + CELL
+	local upForA = objectA.y - CELL
 
-	local leftForB = objectB.x - 8
-	local rightForB = objectB.x + 8
-	local underForB = objectB.y + 8
-	local upForB = objectB.y - 8
+	local leftForB = objectB.x - CELL
+	local rightForB = objectB.x + CELL
+	local underForB = objectB.y + CELL
+	local upForB = objectB.y - CELL
 
   return not (leftForB > rightForA
 					or rightForB < leftForA
@@ -90,16 +84,7 @@ end
 local function make_collision_player_with_door(index)
 	if player.keys > 0 then
 	  player.keys = player.keys - 1
-    table.remove(Objects, index)
-
-		sfx(
-	    Constants.ID_SFX_DOOR,
-			60,
-			32,
-			0,
-			8,
-			1
-		)
+    table.remove(Keys, index)
 
 		return false
 	end
@@ -108,136 +93,64 @@ local function make_collision_player_with_door(index)
 end
 
 local function check_collision_objects(personal, newPosition)
-	for i, obj in pairs(Objects) do
-	  if is_collision_objects(newPosition, obj) then
-		  return obj.make_collisions[personal.type](i)
+	for i, enemy in pairs(Enemies) do
+	  if is_collision_objects(newPosition, enemy) then
+		  return enemy.make_collisions[personal.type](i)
+		end
+	end
+
+	for i, key in pairs(Keys) do
+	  if is_collision_objects(newPosition, key) then
+		  return key.make_collisions[personal.type](i)
+		end
+	end
+
+	for i, door in pairs(Doors) do
+	  if is_collision_objects(newPosition, door) then
+		  return door.make_collisions[personal.type](i)
 		end
 	end
 
 	return false
 end
 
-local function test_move_for(personal, delta, direction_actual)
-	local newPosition = {
-		x = personal.x + delta.deltaX,
-		y = personal.y + delta.deltaY
-	}
-
-	if check_collision_objects(personal, newPosition) then
-		return false
-	end
-
-	local top_left = {
-		x = personal.x - 7 + delta.deltaX,
-		y = personal.y - 8 + delta.deltaY
-  }
-
-	local top_right = {
-	  x = personal.x + 7 + delta.deltaX,
-		y = personal.y - 8 + delta.deltaY
-	}
-
-	local footer_right = {
-		x = personal.x + 7 + delta.deltaX,
-		y = personal.y + 7 + delta.deltaY
-	}
-
-	local footer_left = {
-		x = personal.x - 7 + delta.deltaX,
-		y = personal.y + 7 + delta.deltaY
-	}
-
-	if not (is_collision(top_left)
-  or is_collision(top_right)
-	or is_collision(footer_right)
-	or is_collision(footer_left)) then
-		personal.animation = personal.animation + Constants.SPEED_ANIMATION
-
-    if personal.animation >= 3 then
-			personal.animation = 1
-		end
-
-    personal.x = personal.x + delta.deltaX
-		personal.y = personal.y + delta.deltaY
-		personal.direction = direction_actual
-	end
+local function distancy(enemy, player)
+	return math.sqrt(((enemy.x - player.x) ^ 2) + ((enemy.y - player.y) ^ 2))
 end
 
-local function distancy(enemy, player)
-	local dist_x = enemy.x - player.x
-	local dist_y = enemy.y - player.y
-	local dist = (dist_x * dist_x) + (dist_y * dist_y)
-
-	return math.sqrt(dist)
+local function lerp(a, b, t)
+	return (1 - t) * a + t * b
 end
 
 local function update_game()
-	local animation_player = {
-		{256, 258},
-		{260, 262},
-		{264, 266},
-		{268, 270}
-	}
-
-  local direction_player = {
-		{deltaX = 0, deltaY = -1},
-		{deltaX = 0, deltaY = 1},
-		{deltaX = -1, deltaY = 0},
-		{deltaX = 1, deltaY = 0}
-	}
-
-  for keyword = 0, 3 do
-		if btn(keyword) then
-			local direction = keyword + 1
-			local squad = animation_player[direction]
-      player.sprite = squad[math.floor(player.animation)]
-
-      test_move_for(player, direction_player[direction], direction)
-		end
-	end
-
-	player.sword.update()
+	player.update()
 
 	check_collision_objects(player, player)
 
-	for i, obj in pairs(Objects) do
-		if obj.type == Constants.ENEMY then
-      obj.update(obj)
-		end
+	for i, enemy in pairs(Enemies) do
+    enemy.update()
 	end
 
-	cam.x = (player.x // Constants.WIDTH_WINDOW) * Constants.WIDTH_WINDOW
-	cam.y = (player.y // Constants.HEIGHT_WINDOW) * Constants.HEIGHT_WINDOW
+	for i, key in pairs(Keys) do
+    key.update()
+	end
+
+	for i, door in pairs(Doors) do
+    door.update()
+	end
+
+	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
+  cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
 end
 
 local function update_window()
 	if btn(4) then
-	  sfx(
-			Constants.ID_SFX_INIT,
-			72,
-			32,
-			0,
-			8,
-			0
-		)
-
-    change_window(Window.GAME)
+    window = Window.GAME
 	end
 end
 
 function TIC()
-	if nextWindow then
-		if timeout_change_window > 0 then
-			timeout_change_window  = timeout_change_window - 1
-		end
-		if timeout_change_window == 0 then
-			window = nextWindow
-			nextWindow = nil
-		end
-	else
-		window.update()
-	end
-
+	window.update()
 	window.draw()
 end
 
@@ -253,110 +166,182 @@ local function make_collision_enemy_with_door(index)
 end
 
 local function make_collision_enemy_with_sword(index)
-	table.remove(Objects, index)
+	table.remove(Enemies, index)
 	return false
 end
 
 local function final_match()
-	sfx(
-		Constants.ID_SFX_END_GAME,
-		36,
-		32,
-		0,
-		8,
-		0
-	)
-
-	change_window(Window.END_GAME)
+	window = Window.END_GAME
 end
 
-local function leave(index)
-	return false
-end
-
-local function draw_player()
-	local	block_x = cam.x
-	local	block_y = cam.y
-
-	spr(
-    player.sprite,
-		player.x - 8 - block_x,
-		player.y - 8 - block_y,
-		player.background, -- cor de fundo
-		1, -- escala
-		0, -- espelhar
-		0, -- rotacionar
-		2, -- quantidade de blocos direita
-    2 -- quantidade de blocos esquerda
-	)
-end
-
--- Base class
+-- Base class --
 local function Base()
 	local base = {
 		type = nil,
 		sprite = nil,
 		x = 0,
 		y = 0,
-		background = 0,
+		background = 6,
 		animation = 0,
 		make_collisions = nil,
 		visible = false,
 		timeout = 0
 	}
 
+	function base.move(personal, delta, direction_actual)
+		local newPosition = {
+			x = personal.x + delta.deltaX,
+			y = personal.y + delta.deltaY
+		}
+
+		if check_collision_objects(personal, newPosition) then
+			return false
+		end
+
+		local top_left = {
+			x = personal.x - 7 + delta.deltaX,
+			y = personal.y - 8 + delta.deltaY
+		}
+
+		local top_right = {
+			x = personal.x + 7 + delta.deltaX,
+			y = personal.y - 8 + delta.deltaY
+		}
+
+		local footer_right = {
+			x = personal.x + 7 + delta.deltaX,
+			y = personal.y + 7 + delta.deltaY
+		}
+
+		local footer_left = {
+			x = personal.x - 7 + delta.deltaX,
+			y = personal.y + 7 + delta.deltaY
+		}
+
+		if not (is_collision(top_left)
+		or is_collision(top_right)
+		or is_collision(footer_right)
+		or is_collision(footer_left)) then
+			personal.animation = personal.animation + Constants.SPEED_ANIMATION
+
+			if personal.animation >= 3 then
+				personal.animation = 1
+			end
+
+			personal.x = personal.x + delta.deltaX
+			personal.y = personal.y + delta.deltaY
+			personal.direction = direction_actual
+		end
+	end
+
 	return base
 end
 
-local function Door(p_x, p_y)
+-- Door class --
+local function Door(x, y)
 	local door = Base()
 	door.sprite = Constants.SPRITE_DOOR
-	door.x = p_x * 8 + 8
-	door.y =	p_y * 8 + 8
-	door.background = 6
+	door.x = x
+	door.y =	y
 	door.make_collisions = {
 	  ENEMY = make_collision_enemy_with_door,
 		PLAYER = make_collision_player_with_door,
-		SWORD = leave
+		SWORD = function() return false end
 	}
 	door.visible = true
+
+	function door.draw()
+		if door.visible then
+			spr(
+				door.sprite,
+				cam.x + door.x,
+				cam.y + door.y,
+				door.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
+
+	function door.update()
+		return true
+	end
 
 	return door
 end
 
-local function Key(p_x, p_y)
+-- Key class --
+local function Key(x, y)
 	local key = Base()
 	key.type = Constants.KEY
 	key.sprite = Constants.SPRITE_KEY
-	key.x = p_x * 8
-	key.y =	p_y * 8
-	key.background = 6
+	key.x = x
+	key.y =	y
 	key.make_collisions = {
-		ENEMY = leave,
+		ENEMY = function() return false end,
 		PLAYER = make_collision_player_with_objects,
-		SWORD = leave
+		SWORD = function() return false end
 	}
 	key.visible = true
+
+	function key.draw()
+		if key.visible then
+			spr(
+				key.sprite,
+				cam.x + key.x,
+				cam.y + key.y,
+				key.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
+
+	function key.update()
+		return true
+	end
 
 	return key
 end
 
 -- Enemy class --
-local function Enemy(p_x, p_y)
+local function Enemy(x, y)
 	local enemy = Base()
 	enemy.type = Constants.ENEMY
 	enemy.sprite = Constants.SPRITE_ENEMY
 	enemy.state = States.STOP
-	enemy.x = p_x * 8 + 8
-	enemy.y =	p_y * 8 + 8
+	enemy.x = x
+	enemy.y =	y
 	enemy.background = 14
 	enemy.animation = 1
 	enemy.make_collisions = {
-		ENEMY = leave,
+		ENEMY = function() return false end,
 		PLAYER = restart_game,
 		SWORD = make_collision_enemy_with_sword
 	}
 	enemy.visible = true
+
+	function enemy.draw()
+		if enemy.visible then
+			spr(
+				enemy.sprite,
+				cam.x + enemy.x,
+				cam.y + enemy.y,
+				enemy.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
 
 	function enemy.update()
 		if distancy(enemy, player) < Constants.VIEW_ENEMY then
@@ -379,7 +364,7 @@ local function Enemy(p_x, p_y)
 				enemy.direction = Constants.Direction.UP
 			end
 
-			test_move_for(enemy, delta, enemy.direction)
+			enemy.move(enemy, delta, enemy.direction)
 
 			delta.deltaX = 0
 			delta.deltaY = 0
@@ -392,7 +377,7 @@ local function Enemy(p_x, p_y)
 				enemy.direction = Constants.Direction.LEFT
 			end
 
-			test_move_for(enemy, delta, enemy.direction)
+			enemy.move(enemy, delta, enemy.direction)
 
 			local AnimationEnemy = {
 				{288, 290},
@@ -410,20 +395,36 @@ local function Enemy(p_x, p_y)
 end
 
 -- Sword class --
-local function Sword(p_x, p_y)
+local function Sword(x, y)
 	local sword = Base()
 	sword.type = Constants.SWORD
-	sword.x = p_x + 8
-	sword.y = p_y + 8
+	sword.x = x
+	sword.y = y
 	sword.background = 0
 	sword.animation = 1
 	sword.make_collisions = {
-	  ENEMY = leave,
-		PLAYER = leave,
-		SWORD = leave
+	  ENEMY = function() return false end,
+		PLAYER = function() return false end,
+		SWORD = function() return false end
 	}
 	sword.visible = false
 	sword.timeout = 0
+
+	function sword.draw()
+		if sword.visible then
+			spr(
+				sword.sprite,
+				cam.x + sword.x,
+				cam.y + sword.y,
+				sword.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
 
 	function sword.update()
 		local data_sword = {
@@ -436,36 +437,28 @@ local function Sword(p_x, p_y)
 		local direction = data_sword[player.direction]
 
 		if player.direction then
-			player.sword.x = player.x + direction.x
-			player.sword.y = player.y + direction.y
-			player.sword.sprite = direction.sprite[math.floor(player.sword.animation)]
+			sword.x = player.x + direction.x
+			sword.y = player.y + direction.y
+			sword.sprite = direction.sprite[math.floor(sword.animation)]
 		end
 
 		if btn(4) and player.direction then
-			player.sword.sprite = direction.sprite[math.floor(player.sword.animation)]
-			player.sword.visible = true
-			player.sword.timeout = 15
-			sfx(
-				Constants.ID_SFX_SWORD,
-				86,
-				15,
-				0,
-				8,
-				2
-			)
+			sword.sprite = direction.sprite[math.floor(sword.animation)]
+			sword.visible = true
+			sword.timeout = 15
 		end
 
-		if player.sword.visible then
-			check_collision_objects(player.sword, player.sword)
+		if sword.visible then
+			check_collision_objects(sword, sword)
 
-			player.sword.animation = player.sword.animation + Constants.SPEED_ANIMATION
-			if player.sword.animation >= 3 then
-				player.sword.animation = 1
+			sword.animation = sword.animation + Constants.SPEED_ANIMATION
+			if sword.animation >= 3 then
+				sword.animation = 1
 			end
 
-			player.sword.timeout = player.sword.timeout - 1
-			if player.sword.timeout <= 0 then
-				player.sword.visible = false
+			sword.timeout = sword.timeout - 1
+			if sword.timeout <= 0 then
+				sword.visible = false
 			end
 		end
 	end
@@ -473,52 +466,108 @@ local function Sword(p_x, p_y)
 	return sword
 end
 
-local function draw_map()
-	local block_x = cam.x / 8
-	local block_y = cam.y / 8
+-- Player class --
+local function Player(x, y, sword)
+	local player = Base()
+	player.type = Constants.PLAYER
+	player.sprite = Constants.SPRITE_PLAYER
+	player.x = x
+	player.y = y
+	player.animation = 1
+	player.keys = 0
+	player.sword = sword
 
-	map(
-		block_x,									-- posicao x no mapa
-    block_y,									-- posicao y no mapa
-		Constants.WIDTH_WINDOW,		-- quanto desenhar x
-		Constants.HEIGHT_WINDOW,	-- quanto desenhar y
-		0,												-- em qual ponto colocar o x
-    0 												-- em qual ponto colocar o y
-  )
+	function player.draw()
+		local block_x, block_y = (cam.x + player.x), (cam.y + player.y)
+
+		spr(
+			player.sprite,
+			block_x,
+			block_y,
+			player.background, -- cor de fundo
+			1, -- escala
+			0, -- espelhar
+			0, -- rotacionar
+			2, -- quantidade de blocos direita
+			2 -- quantidade de blocos esquerda
+		)
+	end
+
+	function player.update()
+		local animation_player = {
+			{256, 258},
+			{260, 262},
+			{264, 266},
+			{268, 270}
+		}
+
+	  local direction_player = {
+			{deltaX = 0, deltaY = -1},
+			{deltaX = 0, deltaY = 1},
+			{deltaX = -1, deltaY = 0},
+			{deltaX = 1, deltaY = 0}
+		}
+
+		for keyword = 0, 3 do
+			if btn(keyword) then
+				local direction = keyword + 1
+				local squad = animation_player[direction]
+				player.sprite = squad[math.floor(player.animation)]
+
+				player.move(player, direction_player[direction], direction)
+			end
+		end
+
+		player.sword.update()
+	end
+
+	return player
+end
+
+local function draw_map()
+	local ccx = cam.x / CELL + (cam.x % CELL == 0 and 1 or 0)
+	local ccy = cam.y / CELL + (cam.y % CELL == 0 and 1 or 0)
+
+  map(
+    15 - ccx,
+    8 - ccy,
+    31,
+    18,
+    (cam.x % CELL) - CELL,
+    (cam.y % CELL) - CELL
+	)
 end
 
 local function draw_objects()
-	for i, obj in pairs(Objects) do
-		if obj.visible then
-			spr(
-				obj.sprite,
-				obj.x - 8 - cam.x,
-				obj.y - 8 - cam.y,
-				obj.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
+	player.sword.draw()
+
+	for i, enemy in pairs(Enemies) do
+		enemy.draw()
+	end
+
+	for i, key in pairs(Keys) do
+		key.draw()
+	end
+
+	for i, door in pairs(Doors) do
+		door.draw()
 	end
 end
 
 local function draw_menu()
 	cls()
 
-	spr(
-		Constants.SPRITE_TITLE,
-		80,
-		10,
-		0,
-		1,
-		0,
-		0,
-		Constants.SPRITE_TITLE_LENGTH,
-		Constants.SPRITE_TITLE_HEIGHT
-	)
+--	spr(
+--		Constants.SPRITE_TITLE,
+--		80,
+--		10,
+--		0,
+--		1,
+--		0,
+--		0,
+--		Constants.SPRITE_TITLE_LENGTH,
+--		Constants.SPRITE_TITLE_HEIGHT
+--	)
 
 	print(Constants.ABOUT, 60, 128)
 end
@@ -528,46 +577,53 @@ local function draw_game()
 
 	draw_map()
 	draw_objects()
-	draw_player()
+	player.draw()
 end
 
 function initialize()
-	Objects = {}
+	Enemies = {}
+	Keys = {}
+	Doors = {}
 
 	cam = {
 		x = 0,
 		y = 0
 	}
 
-	local objects = {
+	local enemies = {
 		{x = 26, y = 15, create = Enemy},
 		{x = 45, y = 13, create = Enemy},
 		{x = 5, y = 2, create = Enemy},
 		{x = 4, y = 13, create = Enemy},
 		{x = 26, y = 2, create = Enemy},
+		{x = 580, y = 800, create = Enemy}
+	}
+
+	local keys = {
 		{x = 3, y = 3, create = Key},
-		{x = 25, y = 23, create = Key},
+		{x = 25, y = 23, create = Key}
+	}
+
+	local doors = {
 		{x = 17, y = 7, create = Door},
 		{x = 48, y = 13, create = Door}
 	}
 
-	for i, obj in pairs(objects) do
-		table.insert(Objects, obj.create(obj.x, obj.y))
+	for i, enemy in pairs(enemies) do
+		table.insert(Enemies, enemy.create(enemy.x, enemy.y))
+	end
+
+	for i, key in pairs(keys) do
+		table.insert(Keys, key.create(key.x, key.y))
+	end
+
+	for i, door in pairs(doors) do
+		table.insert(Doors, door.create(door.x, door.y))
 	end
 
 	local sword_init = Sword(0, 0)
-	table.insert(Objects, sword_init)
 
-	player = {
-	 	type = Constants.PLAYER,
-		sprite = Constants.SPRITE_PLAYER,
-		x = 110,
-		y = 38,
-		background = 6,
-		animation = 1,
-		keys = 0,
-		sword = sword_init
-	}
+	player = Player(500, 800, sword_init)
 
 	end_game = {
 		sprite = Constants.SPRITE_END_GAME,
@@ -576,24 +632,17 @@ function initialize()
 		background = 1,
 		visible = true,
 		make_collisions = {
-			ENEMY = leave,
+			ENEMY = function() return false end,
 			PLAYER = final_match,
-			SWORD = leave
+			SWORD = function() return false end
 		}
-
 	}
-	table.insert(Objects, end_game)
-end
-
-local function change_window(new_window)
-	timeout_change_window = Constants.TIMEOUT_NEXT_WINDOW
-	nextWindow = new_window
 end
 
 local function update_window_final()
 	if btn(4) then
 		initialize()
-		change_window(Window.MENU)
+		window = Window.MENU
 	end
 end
 
@@ -620,6 +669,5 @@ Window = {
 	}
 }
 
-last_chekpoint = nil
 window = Window.MENU
 initialize()
