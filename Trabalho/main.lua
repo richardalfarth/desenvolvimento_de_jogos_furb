@@ -71,6 +71,10 @@ local Coins = {}
 local player = {}
 local window = {}
 local end_game = {}
+local round_2 = {}
+local round_3 = {}
+local round_4 = {}
+local round_5 = {}
 
 local function is_collision(point)
 	return mget(
@@ -119,6 +123,10 @@ local function check_collision_objects(personal, newPosition)
 		if is_collision_objects(newPosition, coin) then
 			return coin.make_collision_coin_with_player(i)
 		end
+	end
+
+	if is_collision_objects(newPosition, round_2) then
+		return round_2.update_round()
 	end
 
 	return false
@@ -170,6 +178,8 @@ local function update_game(time)
 	for i, door in pairs(Doors) do door.update(time) end
 
 	for i, coin in pairs(Coins) do coin.update(time) end
+
+	round_2.update()
 
 	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
   cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
@@ -250,6 +260,26 @@ local function Base()
 		end
 	end
 
+	function base.draw()
+		if base.visible then
+			spr(
+				base.sprite,
+				cam.x + base.x,
+				cam.y + base.y,
+				base.background, -- cor de fundo
+				1, -- escala
+				0, -- espelhar
+				0, -- rotacionar
+				2, -- quantidade de blocos direita
+				2 -- quantidade de blocos esquerda
+			)
+		end
+	end
+
+	function base.update(time)
+		return true
+	end
+
 	return base
 end
 
@@ -306,7 +336,7 @@ local function Door(x, y)
 	--door.make_collisions.PLAYER = make_collision_door_with_player
 	door.visible = true
 
-	function door.draw()
+--[[	function door.draw()
 		if door.visible then
 			spr(
 				door.sprite,
@@ -321,10 +351,13 @@ local function Door(x, y)
 			)
 		end
 	end
+]]--
 
+--[[
 	function door.update(time)
 		return true
 	end
+]]--
 
 	function door.make_collision_door_with_player(index)
 		if player.keys > 0 then
@@ -350,6 +383,7 @@ local function Key(x, y)
 	--key.make_collisions.PLAYER = make_collision_key_with_player
 	key.visible = true
 
+--[[
 	function key.draw()
 		if key.visible then
 			spr(
@@ -369,6 +403,7 @@ local function Key(x, y)
 	function key.update(time)
 		return true
 	end
+]]--
 
 	function key.make_collision_key_with_player(index)
 		player.keys = player.keys + 1
@@ -391,6 +426,7 @@ local function Coin(x, y)
 	c.background = 1
 	c.visible = true
 
+--[[
 	function c.draw()
 		if c.visible then
 			spr(
@@ -406,6 +442,7 @@ local function Coin(x, y)
 			)
 		end
 	end
+]]--
 
 	function c.update(time)
 		c.anim.update(time)
@@ -445,6 +482,7 @@ local function Enemy(x, y)
 	enemy.curAnim = nil
 	enemy.visible = true
 
+--[[
 	function enemy.draw()
 		if enemy.visible then
 			spr(
@@ -460,6 +498,7 @@ local function Enemy(x, y)
 			)
 		end
 	end
+]]--
 
 	function enemy.update(time)
 		if distancy(enemy, player) < constants.VIEW_ENEMY then
@@ -549,6 +588,7 @@ local function Sword(x, y)
 	sword.visible = false
 	sword.timeout = 0
 
+--[[
 	function sword.draw()
 		if sword.visible then
 			spr(
@@ -564,6 +604,7 @@ local function Sword(x, y)
 			)
 		end
 	end
+]]--
 
 	function sword.update(time)
 		local delta = {
@@ -602,6 +643,29 @@ local function Sword(x, y)
 	end
 
 	return sword
+end
+
+local function Round(x, y, player_x, player_y, map)
+	local round = Base()
+	round.srite = tiles.DOOR
+	round.x =	x --816
+	round.y = y --769
+	round.player_x = player_x
+	round.player_y = player_y
+	round.background = 1
+	round.visible = true
+	round.map = map
+	round.timeout = 60
+
+	function round.update_round()
+		window = Window.TRANSACTION_ROUND
+
+		player.x = round.player_x
+		player.y = round.player_y
+		sync("map", round.map)
+	end
+
+	return round
 end
 
 -- Player class --
@@ -696,6 +760,8 @@ local function draw_objects()
 	for i, door in pairs(Doors) do door.draw() end
 
 	for i, coin in pairs(Coins) do coin.draw() end
+
+	round_2.draw()
 end
 
 local function draw_menu()
@@ -713,6 +779,10 @@ local function draw_game()
 	player.draw()
 end
 
+local function create_rounds()
+	round_2 = Round(816, 769, 1, 1, 1)
+end
+
 local function initialize()
 	Enemies = {}
 	Keys = {}
@@ -725,11 +795,6 @@ local function initialize()
 	}
 
 	local enemies = {
-		{x = 26, y = 15, create = Enemy},
-		{x = 45, y = 13, create = Enemy},
-		{x = 5, y = 2, create = Enemy},
-		{x = 4, y = 13, create = Enemy},
-		{x = 26, y = 2, create = Enemy},
 		{x = -113, y = 760, create = Enemy},
 		{x = -66, y = 760, create = Enemy},
 		{x = -22, y = 760, create = Enemy},
@@ -782,6 +847,8 @@ local function initialize()
 			SWORD = function() return false end
 		}
 	}
+
+	create_rounds()
 end
 
 local function update_window_final(time)
@@ -797,9 +864,26 @@ local function draw_end_game()
 	print("Pressione 'z' para reiniciar o jogo", 40, 85)
 end
 
+local function update_transaction_round()
+end
+
+local function draw_transaction()
+	if round_2.timeout > 0 then
+		cls()
+		print("Loading..", CAM_W / 2, CAM_H / 2)
+
+		round_2.timeout = round_2.timeout - 1
+	elseif round_2.timeout == 0 then
+		window = Window.GAME
+	end
+end
+
 function TIC()
 	window.update(t)
 	window.draw()
+
+	print(player.x, 0, 20)
+	print(player.y, 0, 30)
 
 	t = t + 1
 end
@@ -813,6 +897,11 @@ Window = {
 	GAME = {
 		update = update_game,
 		draw = draw_game
+	},
+
+	TRANSACTION_ROUND = {
+		update = update_transaction_round,
+		draw = draw_transaction
 	},
 
 	END_GAME = {
