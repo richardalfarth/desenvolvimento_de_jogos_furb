@@ -71,6 +71,8 @@ local Coins = {}
 local player = {}
 local window = {}
 local end_game = {}
+local round_actual = {}
+local round_1 = {}
 local round_2 = {}
 local round_3 = {}
 local round_4 = {}
@@ -101,32 +103,37 @@ local function is_collision_objects(objectA, objectB)
 end
 
 local function check_collision_objects(personal, newPosition)
-	for i, enemy in pairs(Enemies) do
-	  if is_collision_objects(newPosition, enemy) then
-		  return enemy.make_collisions[personal.tag](i)
+	for i, enemy in pairs(round_actual.Enemies) do
+		if is_collision_objects(newPosition, enemy) then
+			if personal.tag == constants.PLAYER then
+				return enemy.make_collision_enemy_with_player(i)
+			elseif personal.tag == constants.SWORD then
+				return enemy.make_collision_enemy_with_sword(i)
+			end
 		end
 	end
 
-	for i, key in pairs(Keys) do
+	for i, key in pairs(round_actual.Keys) do
 	  if is_collision_objects(newPosition, key) then
 		  return key.make_collision_key_with_player(i)
 		end
 	end
 
-	for i, door in pairs(Doors) do
+	for i, door in pairs(round_actual.Doors) do
 	  if is_collision_objects(newPosition, door) then
 		  return door.make_collision_door_with_player(i)
 		end
 	end
 
-	for i, coin in pairs(Coins) do
+	for i, coin in pairs(round_actual.Coins) do
 		if is_collision_objects(newPosition, coin) then
 			return coin.make_collision_coin_with_player(i)
 		end
 	end
 
-	if is_collision_objects(newPosition, round_2) then
-		return round_2.update_round()
+	if round_actual.next_round
+	and is_collision_objects(newPosition, round_actual.next_round) then
+		return round_actual.update_round()
 	end
 
 	return false
@@ -171,15 +178,7 @@ local function update_game(time)
 
 	check_collision_objects(player, player)
 
-	for i, enemy in pairs(Enemies) do enemy.update(time) end
-
-	for i, key in pairs(Keys) do key.update(time) end
-
-	for i, door in pairs(Doors) do door.update(time) end
-
-	for i, coin in pairs(Coins) do coin.update(time) end
-
-	round_2.update()
+	round_actual.update(time)
 
 	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
   cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
@@ -332,37 +331,12 @@ local function Door(x, y)
 	door.sprite = tiles.DOOR
 	door.x = x
 	door.y = y
-	--door.make_collisions.ENEMY = function() return true end
-	--door.make_collisions.PLAYER = make_collision_door_with_player
 	door.visible = true
-
---[[	function door.draw()
-		if door.visible then
-			spr(
-				door.sprite,
-				cam.x + door.x,
-				cam.y + door.y,
-				door.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
-	end
-]]--
-
---[[
-	function door.update(time)
-		return true
-	end
-]]--
 
 	function door.make_collision_door_with_player(index)
 		if player.keys > 0 then
 			player.keys = player.keys - 1
-			table.remove(Keys, index)
+			table.remove(round_actual.Keys, index)
 
 			return false
 		end
@@ -380,34 +354,11 @@ local function Key(x, y)
 	key.sprite = tiles.KEY
 	key.x = x
 	key.y =	y
-	--key.make_collisions.PLAYER = make_collision_key_with_player
 	key.visible = true
-
---[[
-	function key.draw()
-		if key.visible then
-			spr(
-				key.sprite,
-				cam.x + key.x,
-				cam.y + key.y,
-				key.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
-	end
-
-	function key.update(time)
-		return true
-	end
-]]--
 
 	function key.make_collision_key_with_player(index)
 		player.keys = player.keys + 1
-		table.remove(Keys, index)
+		table.remove(round_actual.Keys, index)
 
 		return false
 	end
@@ -422,27 +373,8 @@ local function Coin(x, y)
 	c.x = x
 	c.y =	y
 	c.anim = Anim(15, {416, 418}, true)
-	--c.make_collisions.PLAYER = make_collision_coin_with_player
 	c.background = 1
 	c.visible = true
-
---[[
-	function c.draw()
-		if c.visible then
-			spr(
-				c.sprite,
-				cam.x + c.x,
-				cam.y + c.y,
-				c.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
-	end
-]]--
 
 	function c.update(time)
 		c.anim.update(time)
@@ -453,7 +385,7 @@ local function Coin(x, y)
 
 	function c.make_collision_coin_with_player(index)
 		player.coins = player.coins + 1
-		table.remove(Coins, index)
+		table.remove(round_actual.Coins, index)
 
 		return false
 	end
@@ -471,8 +403,6 @@ local function Enemy(x, y)
 	enemy.x = x
 	enemy.y =	y
 	enemy.animation = 1
-	enemy.make_collisions.PLAYER = make_collision_enemy_with_player
-	enemy.make_collisions.SWORD = make_collision_enemy_with_sword
 	enemy.anims = {
 		Anim(15, {288, 290}, false),
 		Anim(15, {292, 294}, false),
@@ -481,24 +411,6 @@ local function Enemy(x, y)
 	}
 	enemy.curAnim = nil
 	enemy.visible = true
-
---[[
-	function enemy.draw()
-		if enemy.visible then
-			spr(
-				enemy.sprite,
-				cam.x + enemy.x,
-				cam.y + enemy.y,
-				enemy.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
-	end
-]]--
 
 	function enemy.update(time)
 		if distancy(enemy, player) < constants.VIEW_ENEMY then
@@ -542,13 +454,13 @@ local function Enemy(x, y)
 		end
 	end
 
-	function make_collision_enemy_with_sword(index)
-		table.remove(Enemies, index)
+	function enemy.make_collision_enemy_with_sword(index)
+		table.remove(round_actual.Enemies, index)
 		player.score = player.score + 1
 		return false
 	end
 
-	function make_collision_enemy_with_player(index)
+	function enemy.make_collision_enemy_with_player(index)
 		if player.shield > 0 then
 			player.shield = player.shield - 1
 		elseif player.health > 0 then
@@ -561,7 +473,7 @@ local function Enemy(x, y)
 
 			return true
 		else
-			table.remove(Enemies, index)
+			table.remove(round_actual.Enemies, index)
 		end
 
 		return false
@@ -587,24 +499,6 @@ local function Sword(x, y)
 	sword.curAnim = nil
 	sword.visible = false
 	sword.timeout = 0
-
---[[
-	function sword.draw()
-		if sword.visible then
-			spr(
-				sword.sprite,
-				cam.x + sword.x,
-				cam.y + sword.y,
-				sword.background, -- cor de fundo
-				1, -- escala
-				0, -- espelhar
-				0, -- rotacionar
-				2, -- quantidade de blocos direita
-				2 -- quantidade de blocos esquerda
-			)
-		end
-	end
-]]--
 
 	function sword.update(time)
 		local delta = {
@@ -645,24 +539,45 @@ local function Sword(x, y)
 	return sword
 end
 
-local function Round(x, y, player_x, player_y, map)
+local function Round(x,	y,	player_x,	player_y,	map)
 	local round = Base()
 	round.srite = tiles.DOOR
-	round.x =	x --816
-	round.y = y --769
+	round.x =	x
+	round.y = y
 	round.player_x = player_x
 	round.player_y = player_y
 	round.background = 1
 	round.visible = true
 	round.map = map
 	round.timeout = 60
+	round.Coins = {}
+	round.Keys = {}
+	round.Enemies = {}
+	round.Doors = {}
+	round.next_round = nil
+
 
 	function round.update_round()
 		window = Window.TRANSACTION_ROUND
 
-		player.x = round.player_x
-		player.y = round.player_y
-		sync("map", round.map)
+		round_actual = round.next_round
+		player.x = round_actual.player_x
+		player.y = round_actual.player_y
+		sync(4, round_actual.map)
+	end
+
+	function round.draw()
+		for i, enemy in pairs(round.Enemies) do	enemy.draw() end
+		for i, key in pairs(round.Keys) do key.draw()	end
+		for i, door in pairs(round.Doors) do door.draw() end
+		for i, coin in pairs(round.Coins) do coin.draw() end
+	end
+
+	function round.update(time)
+		for i, enemy in pairs(round.Enemies) do enemy.update(time) end
+		for i, key in pairs(round.Keys) do key.update(time) end
+		for i, door in pairs(round.Doors) do door.update(time) end
+		for i, coin in pairs(round.Coins) do coin.update(time) end
 	end
 
 	return round
@@ -694,6 +609,8 @@ local function Player(x, y, sword)
 	p.curAnim = nil
 
 	function p.draw()
+		player.sword.draw()
+
 		local block_x, block_y = (cam.x + p.x), (cam.y + p.y)
 
 		spr(
@@ -751,17 +668,7 @@ end
 
 local function draw_objects()
 	DisplayHUD()
-	player.sword.draw()
-
-	for i, enemy in pairs(Enemies) do	enemy.draw() end
-
-	for i, key in pairs(Keys) do key.draw()	end
-
-	for i, door in pairs(Doors) do door.draw() end
-
-	for i, coin in pairs(Coins) do coin.draw() end
-
-	round_2.draw()
+	round_actual.draw()
 end
 
 local function draw_menu()
@@ -780,10 +687,82 @@ local function draw_game()
 end
 
 local function create_rounds()
-	round_2 = Round(816, 769, 1, 1, 1)
+	local function create_objects(arr_obj, objs)
+		for i, item in pairs(arr_obj) do
+			table.insert(objs, item.create(item.x, item.y))
+		end
+	end
+
+	local objects = {}
+
+	round_1 = Round(0, 0, 1, 125, 0)
+
+	objects = {
+		enemies = {
+			{x = 96, y = 896, create = Enemy},
+			{x = 96, y = 1000, create = Enemy},
+			{x = 336, y = 801, create = Enemy},
+			{x = 510, y = 1000, create = Enemy},
+			{x = 816, y = 970, create = Enemy},
+			{x = 760, y = 1000, create = Enemy},
+			{x = 616, y = 809, create = Enemy},
+			{x = 576, y = 809, create = Enemy},
+			{x = 471, y = 786, create = Enemy},
+			{x = 396, y = 672, create = Enemy},
+			{x = 371, y = 625, create = Enemy},
+			{x = 538, y = 665, create = Enemy},
+			{x = 573, y = 728, create = Enemy},
+			{x = 635, y = 592, create = Enemy},
+			{x = 814, y = 513, create = Enemy},
+			{x = 386, y = 468, create = Enemy},
+			{x = 329, y = 505, create = Enemy},
+			{x = 306, y = 577, create = Enemy},
+			{x = 150, y = 577, create = Enemy},
+			{x = 189, y = 560, create = Enemy},
+			{x = 235, y = 655, create = Enemy},
+			{x = 190, y = 735, create = Enemy},
+			{x = 36, y = 537, create = Enemy},
+			{x = 11, y = 705, create = Enemy},
+			{x = -10, y = 592, create = Enemy},
+			{x = -81, y = 720, create = Enemy}
+		},
+
+		keys = {
+		},
+
+		doors = {
+		},
+
+		coins = {
+			{x = 1, y = 936, create = Coin},
+			{x = -110, y = 830, create = Coin},
+			{x = 336, y = 864, create = Coin},
+			{x = 336, y = 760, create = Coin},
+			{x = 570, y = 787, create = Coin},
+			{x = 451, y = 816, create = Coin},
+			{x = 378, y = 864, create = Coin},
+			{x = 451, y = 816, create = Coin},
+			{x = 514, y = 632, create = Coin},
+			{x = 697, y = 588, create = Coin},
+			{x = 679, y = 513, create = Coin},
+			{x = 814, y = 558, create = Coin},
+			{x = 281, y = 505, create = Coin},
+			{x = 209, y = 592, create = Coin},
+			{x = 211, y = 696, create = Coin},
+			{x = 130, y = 712, create = Coin}
+		}
+	}
+
+	create_objects(objects.enemies, round_1.Enemies)
+	create_objects(objects.keys, round_1.Keys)
+	create_objects(objects.doors, round_1.Doors)
+	create_objects(objects.coins, round_1.Coins)
+
+	round_2 = Round(20, 900, 1, 3, 1)
+	round_1.next_round = round_2
 end
 
-local function initialize()
+function initialize()
 	Enemies = {}
 	Keys = {}
 	Doors = {}
@@ -793,43 +772,6 @@ local function initialize()
 		x = 0,
 		y = 0
 	}
-
-	local enemies = {
-		{x = -113, y = 760, create = Enemy},
-		{x = -66, y = 760, create = Enemy},
-		{x = -22, y = 760, create = Enemy},
-		{x = 42, y = 760, create = Enemy}
-	}
-
-	local keys = {
-		{x = 3, y = 3, create = Key},
-		{x = 25, y = 23, create = Key}
-	}
-
-	local doors = {
-		{x = 17, y = 7, create = Door},
-		{x = 48, y = 13, create = Door}
-	}
-
-	local coins = {
-		{x = 1, y = 900, create = Coin}
-	}
-
-	for i, enemy in pairs(enemies) do
-		table.insert(Enemies, enemy.create(enemy.x, enemy.y))
-	end
-
-	for i, key in pairs(keys) do
-		table.insert(Keys, key.create(key.x, key.y))
-	end
-
-	for i, door in pairs(doors) do
-		table.insert(Doors, door.create(door.x, door.y))
-	end
-
-	for i, coin in pairs(coins) do
-		table.insert(Coins, coin.create(coin.x, coin.y))
-	end
 
 	local sword_init = Sword(0, 0)
 
@@ -849,6 +791,7 @@ local function initialize()
 	}
 
 	create_rounds()
+	round_actual = round_1
 end
 
 local function update_window_final(time)
@@ -870,7 +813,7 @@ end
 local function draw_transaction()
 	if round_2.timeout > 0 then
 		cls()
-		print("Loading..", CAM_W / 2, CAM_H / 2)
+		print("Loading..", CAM_W/2-22, CAM_H/2-18)
 
 		round_2.timeout = round_2.timeout - 1
 	elseif round_2.timeout == 0 then
