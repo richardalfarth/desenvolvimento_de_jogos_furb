@@ -18,12 +18,13 @@ local states_enemy = {
 local tiles = {
 	PLAYER = 260,
 	KEY = 364,
-	DOOR = 366,
+	DOOR = 96,
 	ENEMY = 292,
 	END_GAME = 1,
 	HEALTH = 399,
 	SHIELD = 415,
 	COIN = 416,
+	EMPTY_H_S = 414,
 --	CHECKPOINT = 423,
 
 	TITLE = 352,
@@ -102,7 +103,7 @@ local function is_collision_objects(objectA, objectB)
 					or upForA > underForB)
 end
 
-local function check_collision_objects(personal, newPosition)
+local function check_collision_objects(personal, newPosition, time)
 	for i, enemy in pairs(round_actual.Enemies) do
 		if is_collision_objects(newPosition, enemy) then
 			if personal.tag == constants.PLAYER then
@@ -121,7 +122,7 @@ local function check_collision_objects(personal, newPosition)
 
 	for i, door in pairs(round_actual.Doors) do
 	  if is_collision_objects(newPosition, door) then
-		  return door.make_collision_door_with_player(i)
+		  return door.make_collision_door_with_player(i, time)
 		end
 	end
 
@@ -150,19 +151,19 @@ end
 local function DisplayHUD()
 	print(constants.SCORE..player.score, 0, 0)
 
-	for i = 1, player.health do
+	for j = 1, player.health do
 		spr(
 			tiles.HEALTH,
-			CELL * (i - 1),
+			CELL * (j - 1),
 			CELL,
 			1 -- cor de fundo
 		)
 	end
 
-	for i = 1, player.shield do
+	for j = 1, player.shield do
 		spr(
 			tiles.SHIELD,
-			CELL * (i - 1),
+			CELL * (j - 1),
 			CELL * 2,
 			1 -- cor de fundo
 		)
@@ -173,15 +174,33 @@ local function DisplayHUD()
 	end
 end
 
+local function draw_map()
+	local ccx = cam.x / CELL + (cam.x % CELL == 0 and 1 or 0)
+	local ccy = cam.y / CELL + (cam.y % CELL == 0 and 1 or 0)
+
+  map(
+    15 - ccx,
+    8 - ccy,
+    31,
+    18,
+    (cam.x % CELL) - CELL,
+    (cam.y % CELL) - CELL
+	)
+end
+
+local function update_cam()
+	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
+  cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
+end
+
 local function update_game(time)
 	player.update(time)
 
-	check_collision_objects(player, player)
+	check_collision_objects(player, player, time)
 
 	round_actual.update(time)
 
-	cam.x = math.min(DRAW_X, lerp(cam.x, DRAW_X - player.x, 0.05))
-  cam.y = math.min(DRAW_Y, lerp(cam.y, DRAW_Y - player.y, 0.05))
+	update_cam()
 end
 
 local function update_window(time)
@@ -212,13 +231,13 @@ local function Base()
 		timeout = 0
 	}
 
-	function base.move(personal, delta, direction_actual)
+	function base.move(personal, delta, direction_actual, time)
 		local newPosition = {
 			x = personal.x + delta.x,
 			y = personal.y + delta.y
 		}
 
-		if check_collision_objects(personal, newPosition) then
+		if check_collision_objects(personal, newPosition, time) then
 			return false
 		end
 
@@ -326,22 +345,31 @@ local function Anim(span, frames, loop)
 end
 
 -- Door class --
-local function Door(x, y)
+local function Door(x, y, player_x, player_y, house_door)
 	local door = Base()
 	door.sprite = tiles.DOOR
 	door.x = x
 	door.y = y
+	door.player_x = player_x
+	door.player_y = player_y
+	door.anim = Anim(10, {96, 98}, false)
 	door.visible = true
+	door.house_door = house_door or nil
 
-	function door.make_collision_door_with_player(index)
-		if player.keys > 0 then
-			player.keys = player.keys - 1
-			table.remove(round_actual.Keys, index)
+	function door.make_collision_door_with_player(index, time)
+		door.anim.update(time)
+		door.sprite = door.anim.frame
 
-			return false
-		end
+		window = Window.TRANSACTION_ROUND
+
+		door.home()
 
 		return true
+	end
+
+	function door.home()
+		player.x = door.player_x
+		player.y = door.player_y
 	end
 
 	return door
@@ -433,7 +461,7 @@ local function Enemy(x, y)
 				enemy.direction = const_direction.UP
 			end
 
-			enemy.move(enemy, delta, enemy.direction)
+			enemy.move(enemy, delta, enemy.direction, time)
 
 			delta.x = 0
 			delta.y = 0
@@ -446,7 +474,7 @@ local function Enemy(x, y)
 				enemy.direction = const_direction.LEFT
 			end
 
-			enemy.move(enemy, delta, enemy.direction)
+			enemy.move(enemy, delta, enemy.direction, time)
 
 			enemy.curAnim = enemy.anims[enemy.direction]
 			enemy.curAnim.update(time)
@@ -523,7 +551,7 @@ local function Sword(x, y)
 		end
 
 		if sword.visible then
-			check_collision_objects(sword, sword)
+			check_collision_objects(sword, sword, time)
 
 			if sword.curAnim and sword.curAnim.ended then
 				sword.curAnim.reset()
@@ -588,8 +616,8 @@ local function Player(x, y, sword)
 	local p = Base()
 	p.tag = constants.PLAYER
 	p.sprite = tiles.PLAYER
-	p.x = x * CELL
-	p.y = y * CELL
+	p.x = x
+	p.y = y
 	p.background = 1
 	p.animation = 1
 	p.keys = 0
@@ -642,7 +670,7 @@ local function Player(x, y, sword)
 				p.curAnim.update(time)
 				p.sprite = p.curAnim.frame
 
-				p.move(p, delta[p.direction], p.direction)
+				p.move(p, delta[p.direction], p.direction, time)
 			end
 		end
 
@@ -650,20 +678,6 @@ local function Player(x, y, sword)
 	end
 
 	return p
-end
-
-local function draw_map()
-	local ccx = cam.x / CELL + (cam.x % CELL == 0 and 1 or 0)
-	local ccy = cam.y / CELL + (cam.y % CELL == 0 and 1 or 0)
-
-  map(
-    15 - ccx,
-    8 - ccy,
-    31,
-    18,
-    (cam.x % CELL) - CELL,
-    (cam.y % CELL) - CELL
-	)
 end
 
 local function draw_objects()
@@ -689,7 +703,11 @@ end
 local function create_rounds()
 	local function create_objects(arr_obj, objs)
 		for i, item in pairs(arr_obj) do
-			table.insert(objs, item.create(item.x, item.y))
+			if item.pl_x and item.pl_y then
+				table.insert(objs, item.create(item.x, item.y, item.pl_x, item.pl_y))
+			else
+				table.insert(objs, item.create(item.x, item.y))
+			end
 		end
 	end
 
@@ -720,6 +738,7 @@ local function create_rounds()
 			{x = 150, y = 577, create = Enemy},
 			{x = 189, y = 560, create = Enemy},
 			{x = 235, y = 655, create = Enemy},
+			{x = 251, y = 1000, create = Enemy},
 			{x = 190, y = 735, create = Enemy},
 			{x = 36, y = 537, create = Enemy},
 			{x = 11, y = 705, create = Enemy},
@@ -731,6 +750,8 @@ local function create_rounds()
 		},
 
 		doors = {
+			{x = -16,	y = 983, pl_x = 197, pl_y = 4, create = Door},
+			{x = 180, y = 5, pl_x = -16, pl_y = 1000, create = Door}
 		},
 
 		coins = {
@@ -758,7 +779,7 @@ local function create_rounds()
 	create_objects(objects.doors, round_1.Doors)
 	create_objects(objects.coins, round_1.Coins)
 
-	round_2 = Round(20, 900, 1, 3, 1)
+	round_2 = Round(20, 900, -112, -8, 1)
 	round_1.next_round = round_2
 end
 
@@ -775,7 +796,7 @@ function initialize()
 
 	local sword_init = Sword(0, 0)
 
-	player = Player(1, 125, sword_init)
+	player = Player(-109, 936, sword_init)
 
 	end_game = {
 		sprite = tiles.END_GAME,
@@ -811,13 +832,14 @@ local function update_transaction_round()
 end
 
 local function draw_transaction()
-	if round_2.timeout > 0 then
+	if round_actual.timeout > 0 then
 		cls()
 		print("Loading..", CAM_W/2-22, CAM_H/2-18)
 
-		round_2.timeout = round_2.timeout - 1
-	elseif round_2.timeout == 0 then
+		round_actual.timeout = round_actual.timeout - 1
+	elseif round_actual.timeout == 0 then
 		window = Window.GAME
+		round_actual.timeout = 30
 	end
 end
 
