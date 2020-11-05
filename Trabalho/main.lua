@@ -917,6 +917,10 @@ end
 local function draw_menu()
 	cls()
 
+	if (time()//800) % 2 == 0 then
+		print("Pressione [z] para iniciar", 50, 110)
+	end
+
 	print(constants.ABOUT, 60, 128)
 end
 
@@ -1221,6 +1225,53 @@ function TIC()
 
 	print(player.x, 0, 120)
 	print(player.y, 0, 130)
+
+--[[
+	dialog={}
+	dialog_pos=1
+	text_pos=1
+	dialog = {
+		"Azmoloch: You try my patience, chosen one.",
+		"But I will overlook thy incompetence for now.",
+		"Thou has my blessing until thy task is complete.",
+		"Do not fail me again."
+	}
+
+  if dialog ~= nil 
+  and dialog[dialog_pos] ~= nil then
+	  local str = dialog[dialog_pos]
+    local len = string.len(str)
+
+		if btnp(5) and text_pos >= 2 then
+		  if text_pos < len then
+			  text_pos = len
+		  else
+			  text_pos = 1
+			  dialog_pos = dialog_pos + 1
+			end
+		end
+    
+	  if dialog_pos <= #dialog then
+--		  rect(5, 105, 230, 26, 1)
+-- 		  rectb(5, 105, 230, 26, 15)
+		  print(
+        string.sub(str, 1, text_pos),
+        10,
+        110,
+        15,
+        false,
+        1,
+        true
+      )
+			if text_pos < len and t % 4 == 0 then 
+				text_pos = text_pos + 1
+			end
+		else
+		  dialog_pos = 1
+			dialog = nil
+		end
+	end
+--]]
 
 	t = t + 1
 end
