@@ -24,6 +24,7 @@ local tiles = {
 	ALCOOL = 384,
 	MASK = 352,
 	HEART = 360,
+	NPC = 416,
 	END_GAME = 1,
 	HEALTH = 365,
 	SHIELD = 381,
@@ -52,7 +53,7 @@ local const_direction = {
 local constants = {
 	VIEW_ENEMY = 58,
 
-	ABOUT = "Desenvolvido por Dougls, Richard, Otavio.",
+	ABOUT = "Desenvolvido por Douglas, Richard, Otavio.",
 
 	SCORE = "Pontos: ",
 	COINS_PLAYER = "Moedas: ",
@@ -64,12 +65,18 @@ local constants = {
 	COIN = "COIN",
 	ALCOOL = "ALCOOL",
 	MASK = "MASK",
-	HEART = "HEART"
+	HEART = "HEART",
+	NPC = "NPC"
 }
 
 local player = {}
 local window = {}
 local end_game = {}
+local dialog = nil
+local dialog_pos = 1
+local text_pos = 1
+local menu = {item = 0}
+
 local round_actual = {}
 local round_1 = {}
 local round_2 = {}
@@ -77,38 +84,84 @@ local round_3 = {}
 local round_4 = {}
 local round_5 = {}
 
-local function is_collision(point)
-	return mget(
-		(point.x / CELL) + (CELL * 2),
-		(point.y / CELL) + (CELL + 1)
-	) >= 128
+
+------------------------------------------
+-- collision class
+local function is_collision_objects(object_a, object_b)
+	return math.abs(object_a.x - object_b.x) < CELL
+		and math.abs(object_a.y - object_b.y) < CELL
 end
 
-local function is_collision_objects(object_a, object_b)
-	local left_for_a = object_a.x + CELL
-	local right_for_a = object_a.x - CELL
-	local under_for_a = object_a.y + CELL
-	local up_for_a = object_a.y - CELL
+local function start_dialog()
+	if dialog ~= nil
+  and dialog[dialog_pos] ~= nil then
+	  local str = dialog[dialog_pos]
+    local len = string.len(str)
 
-	local left_for_b = object_b.x - CELL
-	local right_for_b = object_b.x + CELL
-	local under_for_b = object_b.y + CELL
-	local up_for_b = object_b.y - CELL
+		if btnp(5) and text_pos >= 2 then
+		  if text_pos < len then
+			  text_pos = len
+		  else
+			  text_pos = 1
+			  dialog_pos = dialog_pos + 1
+			end
+		end
 
-	if object_b.tag == constants.DOOR then
-		left_for_b = left_for_b - CELL
-		right_for_b = right_for_b + CELL
-		under_for_b = under_for_b - (CELL*2)
+	  if dialog_pos <= #dialog then
+		  rect(5, 105, 230, 30, 5)
+			rectb(5, 105, 230, 30, 15)
+		  print(
+        string.sub(str, 1, text_pos),
+        10,
+        110,
+        15,
+        false,
+        1,
+        true
+      )
+			if text_pos < len and t % 4 == 0 then
+				text_pos = text_pos + 1
+			end
+		else
+		  dialog_pos = 1
+			dialog = nil
+		end
+
+		if dialog	and dialog_pos == #dialog then
+			if btnp(0) then
+				menu.item = 0
+			elseif btnp(1) then
+				menu.item = 1
+			end
+
+			spr(356, 7, 115+menu.item*5, 0)
+
+			if btnp(4) then
+				if menu.item == 0 then
+					if player.coins - 10 >= 0 then
+						player.coins = player.coins - 10
+						player.shield = player.shield + 2
+					end
+				elseif menu.item == 1 then
+					if player.coins - 5 >= 0 then
+						player.coins = player.coins - 5
+						player.health = player.health + 1
+					end
+				end
+			end
+		end
 	end
-
-  return not (left_for_b > right_for_a
-					or right_for_b < left_for_a
-					or under_for_a < up_for_b
-					or up_for_a > under_for_b)
 end
 
 local function check_collision_objects(personal, newPosition, time)
-	for i, box in pairs(round_actual.Boxes) do
+	for _, npc in pairs(round_actual.Npcs) do
+		if personal.tag == constants.PLAYER
+		and is_collision_objects(newPosition, npc) then
+		  return npc.make_collision_npc_with_player()
+		end
+	end
+
+	for _, box in pairs(round_actual.Boxes) do
 		if personal.tag == constants.PLAYER
 		and is_collision_objects(newPosition, box) then
 		  return box.make_collision_box_with_player(time)
@@ -132,7 +185,7 @@ local function check_collision_objects(personal, newPosition, time)
 		end
 	end
 
-	for i, door in pairs(round_actual.Doors) do
+	for _, door in pairs(round_actual.Doors) do
 	  if personal.tag == constants.PLAYER
 		and is_collision_objects(newPosition, door) then
 		  return door.make_collision_door_with_player(time)
@@ -175,8 +228,8 @@ local function check_collision_objects(personal, newPosition, time)
 	return false
 end
 
-local function distancy(e, self)
-	return math.sqrt(((e.x - self.x) ^ 2) + ((e.y - self.y) ^ 2))
+local function distancy(e, p)
+	return math.max(math.abs(e.x-p.x), math.abs(e.y-p.y))
 end
 
 local function lerp(a, b, q)
@@ -188,7 +241,7 @@ local function DisplayHUD()
 
 	print(constants.SCORE..player.score, 0, 0)
 
-	for i = 1, player.health do
+	for _ = 1, player.health do
 		h_s = h_s + 1
 
 		spr(
@@ -199,7 +252,7 @@ local function DisplayHUD()
 		)
 	end
 
-	for j = 1, player.maxHealth - player.health do
+	for _ = 1, player.maxHealth - player.health do
 		h_s = h_s + 1
 
 		spr(
@@ -223,7 +276,7 @@ local function DisplayHUD()
 		)
 	end
 
-	for j = 1, player.maxShield - player.shield do
+	for _ = 1, player.maxShield - player.shield do
 		h_s = h_s + 1
 
 		spr(
@@ -288,43 +341,45 @@ local function Base()
 		background = 6,
 		collided = false,
 		visible = false,
-		timeout = 0
+		timeout = 0,
+		tl = {},
+		tr = {},
+		bl = {},
+		br = {},
+		new_position = {}
 	}
 
-	function self.move(personal, delta, direction_actual, time)
-		local newPosition = {
-			x = personal.x + delta.x,
-			y = personal.y + delta.y
-		}
+	function self.is_collision(point)
+		return mget(
+			(point.x / CELL) + (CELL * 2),
+			(point.y / CELL) + (CELL + 1)
+		) >= 128
+	end
 
-		if check_collision_objects(personal, newPosition, time) then
+	function self.move(personal, delta, direction_actual, time)
+		self.new_position.x = personal.x + delta.x
+		self.new_position.y = personal.y + delta.y
+
+		if check_collision_objects(personal, self.new_position, time) then
 			return false
 		end
 
-		local top_left = {
-			x = personal.x - 7 + delta.x,
-			y = personal.y - 8 + delta.y
-		}
+		self.tl.x = personal.x - 7 + delta.x
+		self.tl.y = personal.y - 8 + delta.y
 
-		local top_right = {
-			x = personal.x + 5 + delta.x,
-			y = personal.y - 8 + delta.y
-		}
+		self.tr.x = personal.x + 5 + delta.x
+		self.tr.y = personal.y - 8 + delta.y
 
-		local footer_right = {
-			x = personal.x + 5 + delta.x,
-			y = personal.y + 7 + delta.y
-		}
+		self.br.x = personal.x + 5 + delta.x
+		self.br.y = personal.y + 7 + delta.y
 
-		local footer_left = {
-			x = personal.x - 7 + delta.x,
-			y = personal.y + 7 + delta.y
-		}
+		self.bl.x = personal.x - 7 + delta.x
+		self.bl.y = personal.y + 7 + delta.y
 
-		if not (is_collision(top_left)
-		or is_collision(top_right)
-		or is_collision(footer_right)
-		or is_collision(footer_left)) then
+		if not self.is_collision(self.tl)
+		and not self.is_collision(self.tr)
+		and not self.is_collision(self.br)
+		and not self.is_collision(self.bl) then
 			if personal.curAnim
 			and personal.curAnim.ended then
 				personal.curAnim.reset()
@@ -340,12 +395,12 @@ local function Base()
 		if self.visible then
 			local block_x = cam.x + self.x
 			local block_y = cam.y + self.y
-			
+
 			if (player.direction == const_direction.RIGHT
 			or player.direction == const_direction.LEFT)
 			and cam.x < 120 then
 				block_x = block_x + 1
-			end			
+			end
 
 			spr(
 				self.sprite,
@@ -422,7 +477,7 @@ local function Box(x, y)
 	self.background = 1
 	self.x = x
 	self.y = y
-	self.anim = Anim(30, {232, 234, 236}, false)
+	self.anim = Anim(20, {232, 234, 236}, false)
 	self.coins = math.random(15)
 	self.visible = true
 
@@ -552,7 +607,7 @@ local function Alcool(x, y)
 	end
 
 	function self.make_collision_alcool_with_player(index)
-		if player.shield + 1 < player.maxShield then
+		if player.shield + 1 <= player.maxShield then
 			player.shield = player.shield + 1
 			table.remove(round_actual.Alcools, index)
 
@@ -638,6 +693,8 @@ local function Enemy(x, y)
 	self.background = 14
 	self.x = x
 	self.y =	y
+	self.dx = 0
+	self.dy = 0
 	self.anims = {
 		Anim(10, {288, 290}, false),
 		Anim(10, {292, 294}, false),
@@ -655,33 +712,37 @@ local function Enemy(x, y)
 		end
 
 		if self.state == states_enemy.PURSUIT then
-			local delta = {
-				x = 0,
-				y = 0
-			}
+			self.dx = 0
+			self.dy = 0
 
 			if player.y > self.y then
-				delta.y = 0.5
-				self.direction = const_direction.DOWN
+				self.dy = 0.5
+
+				if player.x == self.x then
+					self.direction = const_direction.DOWN
+				end
 			elseif player.y < self.y then
-				delta.y = - 0.5
-				self.direction = const_direction.UP
+				self.dy = - 0.5
+
+				if player.x == self.x then
+					self.direction = const_direction.UP
+				end
 			end
 
-			self.move(self, delta, self.direction, time)
+			self.move(self, {x = self.dx, y = self.dy}, self.direction, time)
 
-			delta.x = 0
-			delta.y = 0
+			self.dx = 0
+			self.dy = 0
 
 			if player.x > self.x then
-				delta.x = 0.5
+				self.dx = 0.5
 				self.direction = const_direction.RIGHT
 			elseif player.x < self.x then
-				delta.x = - 0.5
+				self.dx = - 0.5
 				self.direction = const_direction.LEFT
 			end
 
-			self.move(self, delta, self.direction, time)
+			self.move(self, {x = self.dx, y = self.dy}, self.direction, time)
 
 			self.curAnim = self.anims[self.direction]
 			self.curAnim.update(time)
@@ -692,11 +753,13 @@ local function Enemy(x, y)
 	function self.make_collision_enemy_with_sword(index)
 		table.remove(round_actual.Enemies, index)
 		player.score = player.score + math.random(10)
-		
+
 		return false
 	end
 
 	function self.make_collision_enemy_with_player(index)
+		player.damaged = true
+
 		if player.shield > 0 then
 			player.shield = player.shield - 1
 		elseif player.health > 0 then
@@ -726,32 +789,31 @@ local function Sword(x, y)
 	self.y = y
 	self.background = 0
 	self.anims = {
-		Anim(10, {324, 326}, false),	-- UP
-		Anim(10, {332, 330}, false),	-- DOWN
-		Anim(10, {334, 320}, false),	-- LEFT
-		Anim(10, {326, 328}, false)		-- RIGHT
+		Anim(10, {322, 324}, false),	-- UP
+		Anim(10, {334, 328}, false),	-- DOWN
+		Anim(10, {322, 320}, false),	-- LEFT
+		Anim(10, {330, 332}, false)		-- RIGHT
+	}
+	self.delta = {
+		{x = 0, y = - 10},
+		{x = 0, y = 10},
+		{x = -10, y = 0},
+		{x = 10, y = 0}
 	}
 	self.curAnim = nil
 	self.visible = false
 	self.timeout = 0
 
 	function self.update(time)
-		local delta = {
-			{x = 0, y = - 10},	--UP
-			{x = 0, y = 10},		--DOWN
-			{x = -10, y = 0},		--LEFT
-			{x = 10, y = 0}			--RIGHT
-		}
-
 		if player.direction then
-			self.x = player.x + delta[player.direction].x
-			self.y = player.y + delta[player.direction].y
+			self.x = player.x + self.delta[player.direction].x
+			self.y = player.y + self.delta[player.direction].y
 
 			self.curAnim = self.anims[player.direction]
 			self.curAnim.update(time)
 			self.sprite = self.curAnim.frame
 
-			if btn(4) then
+			if btn(4) and dialog == nil then
 				self.visible = true
 				self.timeout = 15
 			end
@@ -794,8 +856,8 @@ local function Round(x,	y,	player_x,	player_y,	map)
 	self.Alcools = {}
 	self.Hearts = {}
 	self.Masks = {}
+	self.Npcs = {}
 	self.next_round = nil
-
 
 	function self.update_round()
 		window = Window.TRANSACTION_ROUND
@@ -807,36 +869,69 @@ local function Round(x,	y,	player_x,	player_y,	map)
 	end
 
 	function self.draw()
-		for i, box in pairs(self.Boxes) do box.draw() end
-		for i, enemy in pairs(self.Enemies) do enemy.draw() end
-		for i, key in pairs(self.Keys) do key.draw() end
-		for i, door in pairs(self.Doors) do door.draw() end
-		for i, coin in pairs(self.Coins) do coin.draw() end
-		for i, alcool in pairs(self.Alcools) do alcool.draw() end
-		for i, heart in pairs(self.Hearts) do heart.draw() end
-		for i, mask in pairs(self.Masks) do mask.draw() end
+		for _, box in pairs(self.Boxes) do box.draw() end
+		for _, enemy in pairs(self.Enemies) do enemy.draw() end
+		for _, key in pairs(self.Keys) do key.draw() end
+		for _, door in pairs(self.Doors) do door.draw() end
+		for _, coin in pairs(self.Coins) do coin.draw() end
+		for _, alcool in pairs(self.Alcools) do alcool.draw() end
+		for _, heart in pairs(self.Hearts) do heart.draw() end
+		for _, mask in pairs(self.Masks) do mask.draw() end
+		for _, npc in pairs(self.Npcs) do npc.draw() end
 	end
 
 	function self.update(time)
-		for i, box in pairs(self.Boxes) do box.update(time) end
-		for i, enemy in pairs(self.Enemies) do enemy.update(time) end
-		for i, key in pairs(self.Keys) do key.update(time) end
-		for i, door in pairs(self.Doors) do door.update(time) end
-		for i, coin in pairs(self.Coins) do coin.update(time) end
-		for i, alcool in pairs(self.Alcools) do alcool.update(time) end
-		for i, heart in pairs(self.Hearts) do heart.update(time) end
-		for i, mask in pairs(self.Masks) do mask.update(time) end
+		for _, box in pairs(self.Boxes) do box.update(time) end
+		for _, enemy in pairs(self.Enemies) do enemy.update(time) end
+		for _, key in pairs(self.Keys) do key.update(time) end
+		for _, door in pairs(self.Doors) do door.update(time) end
+		for _, coin in pairs(self.Coins) do coin.update(time) end
+		for _, alcool in pairs(self.Alcools) do alcool.update(time) end
+		for _, heart in pairs(self.Hearts) do heart.update(time) end
+		for _, mask in pairs(self.Masks) do mask.update(time) end
+		for _, npc in pairs(self.Npcs) do npc.update(time) end
 	end
 
 	function self.reset()
-		for i, box in pairs(self.Boxes) do box.reset() end
-		for i, enemy in pairs(self.Enemies) do enemy.reset() end
-		for i, key in pairs(self.Keys) do key.reset() end
-		for i, door in pairs(self.Doors) do door.reset() end
-		for i, coin in pairs(self.Coins) do coin.reset() end
-		for i, alcool in pairs(self.Alcools) do alcool.reset() end
-		for i, heart in pairs(self.Hearts) do heart.reset() end
-		for i, mask in pairs(self.Masks) do mask.reset() end
+		for _, box in pairs(self.Boxes) do box.reset() end
+		for _, enemy in pairs(self.Enemies) do enemy.reset() end
+		for _, key in pairs(self.Keys) do key.reset() end
+		for _, door in pairs(self.Doors) do door.reset() end
+		for _, coin in pairs(self.Coins) do coin.reset() end
+		for _, alcool in pairs(self.Alcools) do alcool.reset() end
+		for _, heart in pairs(self.Hearts) do heart.reset() end
+		for _, mask in pairs(self.Masks) do mask.reset() end
+		for _, npc in pairs(self.Npcs) do npc.reset() end
+	end
+
+	return self
+end
+
+-- NPC class --
+local function NPC(x, y, dialog_npc)
+	local self = Base()
+	self.tag = constants.NPC
+	self.sprite = tiles.NPC
+	self.x = x
+	self.y =	y
+	self.anim = Anim(15, {416, 418, 420, 422}, true)
+	self.dialog = dialog_npc or nil
+	self.background = 6
+	self.visible = true
+
+	function self.update(time)
+		self.anim.update(time)
+		self.sprite = self.anim.frame
+
+		return true
+	end
+
+	function self.make_collision_npc_with_player()
+		if btn(5) then
+			dialog = self.dialog
+		end
+
+		return true
 	end
 
 	return self
@@ -864,12 +959,30 @@ local function Player(x, y, sword)
 		Anim(9, {264, 266}, false),
 		Anim(9, {268, 270}, false)
 	}
+	self.delta = {
+		{x = 0, y = -1},	-- up
+		{x = 0, y = 1},		-- down
+		{x = -1, y = 0},	-- left
+		{x = 1, y = 0}		-- right
+	}
 	self.curAnim = nil
+	self.damaged = false
+	self.timeout = 30
 
 	function self.draw()
 		player.sword.draw()
 
 		local block_x, block_y = (cam.x + self.x), (cam.y + self.y)
+
+		if self.damaged
+		and (time()//250) % 2 ~= 0
+		and self.timeout > 0 then
+			self.timeout = self.timeout - 1
+			return
+		elseif self.timeout == 0 then
+			self.damaged = false
+			self.timeout = 30
+		end
 
 		spr(
 			self.sprite,
@@ -885,22 +998,17 @@ local function Player(x, y, sword)
 	end
 
 	function self.update(time)
-	  local delta = {
-			{x = 0, y = -1},	-- up
-			{x = 0, y = 1},		-- down
-			{x = -1, y = 0},	-- left
-			{x = 1, y = 0}		-- right
-		}
+		if dialog == nil then
+			for keyword = 0, 3 do
+				if btn(keyword) then
+					self.direction = keyword + 1
 
-		for keyword = 0, 3 do
-			if btn(keyword) then
-				self.direction = keyword + 1
+					self.curAnim = self.anims[self.direction]
+					self.curAnim.update(time)
+					self.sprite = self.curAnim.frame
 
-				self.curAnim = self.anims[self.direction]
-				self.curAnim.update(time)
-				self.sprite = self.curAnim.frame
-
-				self.move(self, delta[self.direction], self.direction, time)
+					self.move(self, self.delta[self.direction], self.direction, time)
+				end
 			end
 		end
 
@@ -917,11 +1025,24 @@ end
 local function draw_menu()
 	cls()
 
+	spr(
+		448,
+		75,
+		30,
+		0, -- cor de fundo
+		1, -- escala
+		0, -- espelhar
+		0, -- rotacionar
+		10, -- quantidade de blocos direita
+		10 -- quantidade de blocos esquerda
+	)
+
+
 	if (time()//800) % 2 == 0 then
-		print("Pressione [z] para iniciar", 50, 110)
+		print("Pressione [z]", 80, 90)
 	end
 
-	print(constants.ABOUT, 60, 128)
+	print(constants.ABOUT, 5, 128)
 end
 
 local function draw_game()
@@ -931,218 +1052,228 @@ local function draw_game()
 	draw_objects()
 
 	player.draw()
+	start_dialog()
 	DisplayHUD()
 end
 
 local function create_rounds()
 	local function create_objects(arr_obj, objs)
-		for i, item in pairs(arr_obj) do
+		for _, item in pairs(arr_obj) do
 			if item.pl_x and item.pl_y then
 				table.insert(objs, item.create(item.x, item.y, item.pl_x, item.pl_y))
+			elseif item.dialog then
+				table.insert(objs, item.create(item.x, item.y, item.dialog))
 			else
 				table.insert(objs, item.create(item.x, item.y))
 			end
 		end
 	end
 
-	local objects = {}
-
 	round_1 = Round(0, 0, 1, 125, 0)
 
-	objects = {
-		alcools = {
-			{x = -111, y = 999, create = Alcool},
-			{x = 942, y = 174, create = Alcool},
-			{x = 568, y = 277, create = Alcool},
-			{x = 373, y = 667, create = Alcool},
-			{x = 797, y = 786, create = Alcool},
-			{x = 1169, y = 704, create = Alcool},
-			{x = 1341, y = 37, create = Alcool}
-		},
-
-		hearts = {
-			{x = 1038, y = 101, create = Heart},
-			{x = 1097, y = 424, create = Heart},
-			{x = 709, y = 633, create = Heart},
-			{x = -110, y = 732, create = Heart},
-			{x = 1528, y = 538, create = Heart},
-			{x = 329, y = 902, create = Heart},
-			{x = 1342, y = 580, create = Heart},
-			{x = 1527, y = 855, create = Heart},
-			{x = 1425, y = 24, create = Heart},
-			{x = 778, y = 94, create = Heart}
-		},
-
-		masks = {
-			{x = 297, y = 90, create = Mask},
-			{x = 92, y = 493, create = Mask},
-			{x = 1438, y = 584, create = Mask},
-			{x = 1526, y = 270, create = Mask},
-			{x = 1107, y = 952, create = Mask},
-			{x = 1417, y = 855, create = Mask},
-			{x = 1425, y = 0, create = Mask}
-		},
-
-		boxes = {
-			{x = -110, y = 899, create = Box},
-			{x = 265, y = 88, create = Box},
-			{x = 328, y = 88, create = Box},
-			{x = 944, y = 87, create = Box},
-			{x = 84, y = 765, create = Box},
-			{x = 1177, y = 363, create = Box},
-			{x = 95, y = 627, create = Box},
-			{x = 1525, y = 580, create = Box},
-			{x = 1525, y = 500, create = Box},
-			{x = 1113, y = 636, create = Box},
-			{x = 1162, y = 636, create = Box},
-			{x = 1441, y = 793, create = Box},
-			{x = 1528, y = -8, create = Box}
-		},
-
-		enemies = {
-			{x = 96, y = 896, create = Enemy},
-			{x = 96, y = 1000, create = Enemy},
-			{x = 336, y = 801, create = Enemy},
-			{x = 510, y = 1000, create = Enemy},
-			{x = 816, y = 970, create = Enemy},
-			{x = 760, y = 1000, create = Enemy},
-			{x = 616, y = 809, create = Enemy},
-			{x = 576, y = 809, create = Enemy},
-			{x = 471, y = 786, create = Enemy},
-			{x = 396, y = 672, create = Enemy},
-			{x = 371, y = 625, create = Enemy},
-			{x = 538, y = 665, create = Enemy},
-			{x = 573, y = 728, create = Enemy},
-			{x = 635, y = 592, create = Enemy},
-			{x = 814, y = 513, create = Enemy},
-			{x = 386, y = 468, create = Enemy},
-			{x = 329, y = 505, create = Enemy},
-			{x = 306, y = 577, create = Enemy},
-			{x = 150, y = 577, create = Enemy},
-			{x = 189, y = 560, create = Enemy},
-			{x = 235, y = 655, create = Enemy},
-			{x = 251, y = 1000, create = Enemy},
-			{x = 190, y = 735, create = Enemy},
-			{x = 36, y = 537, create = Enemy},
-			{x = 11, y = 705, create = Enemy},
-			{x = -10, y = 592, create = Enemy},
-			{x = -81, y = 720, create = Enemy},
-			{x = 287, y = 104, create = Enemy},
-			{x = 223, y = 764, create = Enemy},
-			{x = 979, y = 100, create = Enemy},
-			{x = 620, y = 129, create = Enemy},
-			{x = 771, y = 167, create = Enemy},
-			{x = 944, y = 119, create = Enemy},
-			{x = -107, y = 774, create = Enemy},
-			{x = 86, y = 789, create = Enemy},
-			{x = -9, y = 767, create = Enemy},
-			{x = 75, y = 111, create = Enemy},
-			{x = -48, y = 172, create = Enemy},
-			{x = 1099, y = 368, create = Enemy},
-			{x = 322, y = 111, create = Enemy},
-			{x = 469, y = 277, create = Enemy},
-			{x = 532, y = 292, create = Enemy},
-			{x = 1133, y = 445, create = Enemy},
-			{x = 628, y = 632, create = Enemy},
-			{x = 375, y = 555, create = Enemy},
-			{x = -11, y = 527, create = Enemy},
-			{x = 85, y = 728, create = Enemy},
-			{x = -13, y = 728, create = Enemy},
-			{x = 802, y = 829, create = Enemy},
-			{x = 1530, y = 515, create = Enemy},
-			{x = 1530, y = 564, create = Enemy},
-			{x = 1476, y = 232, create = Enemy},
-			{x = 1466, y = 302, create = Enemy},
-			{x = 1413, y = 270, create = Enemy},
-			{x = 1137, y = 635, create = Enemy},
-			{x = 1167, y = 659, create = Enemy},
-			{x = 1144, y = 912, create = Enemy},
-			{x = 1146, y = 984, create = Enemy},
-			{x = 1479, y = 813, create = Enemy},
-			{x = 1380, y = 813, create = Enemy},
-			{x = 1482, y = 855, create = Enemy},
-			{x = 1392, y = 16, create = Enemy},
-			{x = 1392, y = 16, create = Enemy},
-			{x = 1455, y = 21, create = Enemy},
-			{x = 1527, y = 37, create = Enemy},
-			{x = 1524, y = -38, create = Enemy},
-			{x = 1356, y = -35, create = Enemy}
-		},
-
-		keys = {
-		},
-
-		doors = {
-			{x = 761,	y = 952, pl_x = 705, pl_y = 93, create = Door},
-			{x = 705, y = 73, pl_x = 761, pl_y = 970, create = Door},
-
-			{x = 176,	y = 953, pl_x = -8, pl_y = 92, create = Door},
-			{x = -8,	y = 73, pl_x = 176, pl_y = 970, create = Door},
-
-			{x = 73,	y = 849, pl_x = 297, pl_y = 175, create = Door},
-			{x = 297,	y = 193, pl_x = 73, pl_y = 862, create = Door},
-
-			{x = 169,	y = 849, pl_x = 370, pl_y = 288, create = Door},
-			{x = 361,	y = 289, pl_x = 169, pl_y = 862, create = Door},
-
-			{x = 497,	y = 954, pl_x = 1174, pl_y = 400, create = Door},
-			{x = 1193,	y = 400, pl_x = 497, pl_y = 990, create = Door},
-
-			{x = 409,	y = 832, pl_x = 1341, pl_y = 536, create = Door},
-			{x = 1320,	y = 536, pl_x = 409, pl_y = 848, create = Door},
-
-			{x = 729,	y = 698, pl_x = 1335, pl_y = 264, create = Door},
-			{x = 1321,	y = 264, pl_x = 729, pl_y = 710, create = Door},
-
-			{x = 489,	y = 546, pl_x = 1137, pl_y = 720, create = Door},
-			{x = 1137,	y = 737, pl_x = 489, pl_y = 560, create = Door},
-
-			{x = 169,	y = 522, pl_x = 1195, pl_y = 944, create = Door},
-			{x = 1209,	y = 944, pl_x = 169, pl_y = 540, create = Door},
-
-			{x = 168,	y = 697, pl_x = 1426, pl_y = 770, create = Door},
-			{x = 1426,	y = 752, pl_x = 168, pl_y = 715, create = Door},
-
-			{x = -64,	y = 665, pl_x = 1425, pl_y = -48, create = Door},
-			{x = 1425,	y = -63, pl_x = -64, pl_y = 680, create = Door}
-		},
-
-		coins = {
-			{x = 1, y = 936, create = Coin},
-			{x = -110, y = 830, create = Coin},
-			{x = 336, y = 864, create = Coin},
-			{x = 336, y = 760, create = Coin},
-			{x = 570, y = 787, create = Coin},
-			{x = 451, y = 816, create = Coin},
-			{x = 378, y = 864, create = Coin},
-			{x = 451, y = 816, create = Coin},
-			{x = 514, y = 632, create = Coin},
-			{x = 697, y = 588, create = Coin},
-			{x = 679, y = 513, create = Coin},
-			{x = 814, y = 558, create = Coin},
-			{x = 281, y = 505, create = Coin},
-			{x = 209, y = 592, create = Coin},
-			{x = 211, y = 696, create = Coin},
-			{x = 130, y = 712, create = Coin},
-			{x = 1009, y = 169, create = Coin},
-			{x = 620, y = 174, create = Coin},
-			{x = -99, y = 109, create = Coin},
-			{x = 79, y = 174, create = Coin},
-			{x = 378, y = 586, create = Coin},
-			{x = 49, y = 493, create = Coin},
-			{x = 1412, y = 230, create = Coin},
-			{x = 1341, y = 855, create = Coin}
-		}
+	local dialog_npc = {
+		"Bom dia! Eu sou mercador.",
+		"O que desejas comprar?".."\n"..
+		"				Mascara (10 moedas).".."\n"..
+		"				Vida (5 moedas)."
 	}
 
-	create_objects(objects.alcools, round_1.Alcools)
-	create_objects(objects.hearts, round_1.Hearts)
-	create_objects(objects.masks, round_1.Masks)
-	create_objects(objects.boxes, round_1.Boxes)
-	create_objects(objects.enemies, round_1.Enemies)
-	create_objects(objects.keys, round_1.Keys)
-	create_objects(objects.doors, round_1.Doors)
-	create_objects(objects.coins, round_1.Coins)
+	local	alcools = {
+		{x = -111, y = 999, create = Alcool},
+		{x = 942, y = 174, create = Alcool},
+		{x = 568, y = 277, create = Alcool},
+		{x = 373, y = 667, create = Alcool},
+		{x = 797, y = 786, create = Alcool},
+		{x = 1169, y = 704, create = Alcool},
+		{x = 1341, y = 37, create = Alcool}
+	}
+
+	local hearts = {
+		{x = 1038, y = 101, create = Heart},
+		{x = 1097, y = 424, create = Heart},
+		{x = 709, y = 633, create = Heart},
+		{x = -110, y = 732, create = Heart},
+		{x = 1528, y = 538, create = Heart},
+		{x = 329, y = 902, create = Heart},
+		{x = 1342, y = 580, create = Heart},
+		{x = 1527, y = 855, create = Heart},
+		{x = 1425, y = 24, create = Heart},
+		{x = 778, y = 94, create = Heart}
+	}
+
+	local masks = {
+		{x = 297, y = 90, create = Mask},
+		{x = 92, y = 493, create = Mask},
+		{x = 1438, y = 584, create = Mask},
+		{x = 1526, y = 270, create = Mask},
+		{x = 1107, y = 952, create = Mask},
+		{x = 1417, y = 855, create = Mask},
+		{x = 1425, y = 0, create = Mask}
+	}
+
+	local boxes = {
+		{x = -110, y = 899, create = Box},
+		{x = 265, y = 88, create = Box},
+		{x = 328, y = 88, create = Box},
+		{x = 944, y = 87, create = Box},
+		{x = 84, y = 765, create = Box},
+		{x = 1177, y = 363, create = Box},
+		{x = 95, y = 627, create = Box},
+		{x = 1525, y = 580, create = Box},
+		{x = 1525, y = 500, create = Box},
+		{x = 1113, y = 636, create = Box},
+		{x = 1162, y = 636, create = Box},
+		{x = 1441, y = 793, create = Box},
+		{x = 1528, y = -8, create = Box}
+	}
+
+	local enemies = {
+		{x = 96, y = 896, create = Enemy},
+		{x = 96, y = 1000, create = Enemy},
+		{x = 336, y = 801, create = Enemy},
+		{x = 510, y = 1000, create = Enemy},
+		{x = 816, y = 970, create = Enemy},
+		{x = 760, y = 1000, create = Enemy},
+		{x = 616, y = 809, create = Enemy},
+		{x = 576, y = 809, create = Enemy},
+		{x = 471, y = 786, create = Enemy},
+		{x = 396, y = 672, create = Enemy},
+		{x = 371, y = 625, create = Enemy},
+		{x = 538, y = 665, create = Enemy},
+		{x = 573, y = 728, create = Enemy},
+		{x = 635, y = 592, create = Enemy},
+		{x = 814, y = 513, create = Enemy},
+		{x = 386, y = 488, create = Enemy},
+		{x = 329, y = 505, create = Enemy},
+		{x = 306, y = 577, create = Enemy},
+		{x = 150, y = 577, create = Enemy},
+		{x = 189, y = 560, create = Enemy},
+		{x = 235, y = 655, create = Enemy},
+		{x = 251, y = 1000, create = Enemy},
+		{x = 190, y = 735, create = Enemy},
+		{x = 36, y = 537, create = Enemy},
+		{x = 11, y = 705, create = Enemy},
+		{x = -10, y = 592, create = Enemy},
+		{x = -81, y = 720, create = Enemy},
+		{x = 287, y = 104, create = Enemy},
+		{x = 223, y = 764, create = Enemy},
+		{x = 979, y = 100, create = Enemy},
+		{x = 620, y = 129, create = Enemy},
+		{x = 771, y = 167, create = Enemy},
+		{x = 944, y = 119, create = Enemy},
+		{x = -107, y = 774, create = Enemy},
+		{x = 86, y = 789, create = Enemy},
+		{x = -9, y = 767, create = Enemy},
+		{x = 75, y = 111, create = Enemy},
+		{x = -48, y = 172, create = Enemy},
+		{x = 1099, y = 368, create = Enemy},
+		{x = 322, y = 111, create = Enemy},
+		{x = 469, y = 277, create = Enemy},
+		{x = 532, y = 292, create = Enemy},
+		{x = 1133, y = 445, create = Enemy},
+		{x = 628, y = 632, create = Enemy},
+		{x = 375, y = 555, create = Enemy},
+		{x = -11, y = 527, create = Enemy},
+		{x = 85, y = 728, create = Enemy},
+		{x = -13, y = 728, create = Enemy},
+		{x = 802, y = 829, create = Enemy},
+		{x = 1530, y = 515, create = Enemy},
+		{x = 1530, y = 564, create = Enemy},
+		{x = 1476, y = 232, create = Enemy},
+		{x = 1466, y = 302, create = Enemy},
+		{x = 1413, y = 270, create = Enemy},
+		{x = 1137, y = 635, create = Enemy},
+		{x = 1167, y = 659, create = Enemy},
+		{x = 1144, y = 912, create = Enemy},
+		{x = 1146, y = 984, create = Enemy},
+		{x = 1479, y = 813, create = Enemy},
+		{x = 1380, y = 813, create = Enemy},
+		{x = 1482, y = 855, create = Enemy},
+		{x = 1392, y = 16, create = Enemy},
+		{x = 1392, y = 16, create = Enemy},
+		{x = 1455, y = 21, create = Enemy},
+		{x = 1527, y = 37, create = Enemy},
+		{x = 1524, y = -38, create = Enemy},
+		{x = 1356, y = -35, create = Enemy}
+	}
+
+	local keys = {}
+
+	local doors = {
+		{x = 761,	y = 952, pl_x = 705, pl_y = 93, create = Door},
+		{x = 705, y = 73, pl_x = 761, pl_y = 970, create = Door},
+
+		{x = 176,	y = 953, pl_x = -8, pl_y = 92, create = Door},
+		{x = -8,	y = 73, pl_x = 176, pl_y = 970, create = Door},
+
+		{x = 73,	y = 849, pl_x = 297, pl_y = 175, create = Door},
+		{x = 297,	y = 193, pl_x = 73, pl_y = 862, create = Door},
+
+		{x = 169,	y = 849, pl_x = 370, pl_y = 288, create = Door},
+		{x = 361,	y = 289, pl_x = 169, pl_y = 862, create = Door},
+
+		{x = 497,	y = 954, pl_x = 1174, pl_y = 400, create = Door},
+		{x = 1193,	y = 400, pl_x = 497, pl_y = 990, create = Door},
+
+		{x = 409,	y = 832, pl_x = 1341, pl_y = 536, create = Door},
+		{x = 1320,	y = 536, pl_x = 409, pl_y = 848, create = Door},
+
+		{x = 729,	y = 698, pl_x = 1335, pl_y = 264, create = Door},
+		{x = 1321,	y = 264, pl_x = 729, pl_y = 710, create = Door},
+
+		{x = 489,	y = 546, pl_x = 1137, pl_y = 720, create = Door},
+		{x = 1137,	y = 737, pl_x = 489, pl_y = 560, create = Door},
+
+		{x = 169,	y = 522, pl_x = 1195, pl_y = 944, create = Door},
+		{x = 1209,	y = 944, pl_x = 169, pl_y = 540, create = Door},
+
+		{x = 168,	y = 697, pl_x = 1426, pl_y = 770, create = Door},
+		{x = 1426,	y = 752, pl_x = 168, pl_y = 715, create = Door},
+
+		{x = -64,	y = 665, pl_x = 1425, pl_y = -48, create = Door},
+		{x = 1425,	y = -63, pl_x = -64, pl_y = 680, create = Door}
+	}
+
+	local coins = {
+		{x = 1, y = 936, create = Coin},
+		{x = -110, y = 830, create = Coin},
+		{x = 336, y = 864, create = Coin},
+		{x = 336, y = 760, create = Coin},
+		{x = 570, y = 787, create = Coin},
+		{x = 451, y = 816, create = Coin},
+		{x = 378, y = 864, create = Coin},
+		{x = 451, y = 816, create = Coin},
+		{x = 514, y = 632, create = Coin},
+		{x = 697, y = 588, create = Coin},
+		{x = 679, y = 513, create = Coin},
+		{x = 814, y = 558, create = Coin},
+		{x = 281, y = 505, create = Coin},
+		{x = 209, y = 592, create = Coin},
+		{x = 211, y = 696, create = Coin},
+		{x = 130, y = 712, create = Coin},
+		{x = 1009, y = 169, create = Coin},
+		{x = 620, y = 174, create = Coin},
+		{x = -99, y = 109, create = Coin},
+		{x = 79, y = 174, create = Coin},
+		{x = 378, y = 586, create = Coin},
+		{x = 49, y = 493, create = Coin},
+		{x = 1412, y = 230, create = Coin},
+		{x = 1341, y = 855, create = Coin}
+	}
+
+	local npcs = {
+		{x = 20, y = 936, dialog = dialog_npc, create = NPC}
+	}
+
+	create_objects(alcools, round_1.Alcools)
+	create_objects(hearts, round_1.Hearts)
+	create_objects(masks, round_1.Masks)
+	create_objects(boxes, round_1.Boxes)
+	create_objects(enemies, round_1.Enemies)
+	create_objects(keys, round_1.Keys)
+	create_objects(doors, round_1.Doors)
+	create_objects(coins, round_1.Coins)
+	create_objects(npcs, round_1.Npcs)
 
 	round_2 = Round(-56, 576, -112, -8, 1)
 	round_1.next_round = round_2
@@ -1158,6 +1289,7 @@ function initialize()
 
 	player = Player(-109, 936, sword_init)
 
+--[[
 	end_game = {
 		sprite = tiles.END_GAME,
 		x =	8,
@@ -1170,7 +1302,7 @@ function initialize()
 			SWORD = function() return false end
 		}
 	}
-
+]]--
 	create_rounds()
 	round_actual = round_1
 end
@@ -1223,55 +1355,8 @@ function TIC()
 	print((cam.y % CELL) - CELL, 0, 100)
 ]]--
 
-	print(player.x, 0, 120)
-	print(player.y, 0, 130)
-
---[[
-	dialog={}
-	dialog_pos=1
-	text_pos=1
-	dialog = {
-		"Azmoloch: You try my patience, chosen one.",
-		"But I will overlook thy incompetence for now.",
-		"Thou has my blessing until thy task is complete.",
-		"Do not fail me again."
-	}
-
-  if dialog ~= nil 
-  and dialog[dialog_pos] ~= nil then
-	  local str = dialog[dialog_pos]
-    local len = string.len(str)
-
-		if btnp(5) and text_pos >= 2 then
-		  if text_pos < len then
-			  text_pos = len
-		  else
-			  text_pos = 1
-			  dialog_pos = dialog_pos + 1
-			end
-		end
-    
-	  if dialog_pos <= #dialog then
---		  rect(5, 105, 230, 26, 1)
--- 		  rectb(5, 105, 230, 26, 15)
-		  print(
-        string.sub(str, 1, text_pos),
-        10,
-        110,
-        15,
-        false,
-        1,
-        true
-      )
-			if text_pos < len and t % 4 == 0 then 
-				text_pos = text_pos + 1
-			end
-		else
-		  dialog_pos = 1
-			dialog = nil
-		end
-	end
---]]
+--	print(player.x, 0, 120)
+--	print(player.y, 0, 130)
 
 	t = t + 1
 end
