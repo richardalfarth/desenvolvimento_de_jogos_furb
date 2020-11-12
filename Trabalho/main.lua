@@ -1377,7 +1377,7 @@ local function create_rounds()
 		
 		{x = -38, y = 144, pl_x = 1657, pl_y = 272, create = Door},
 		{x = 1673, y = 272, pl_x = -38, pl_y = 160, create = Door},
-		{x = 1591, y = 272, pl_x = 1770, pl_y = 424, create = Door},
+		{x = 1560, y = 272, pl_x = 1749, pl_y = 424, create = Door},
 		{x = 1754, y = 424, pl_x = 1607, pl_y = 272, create = Door},
 
 		{x = -13, y = 416, pl_x = 1729, pl_y = 759, create = Door},
@@ -1461,7 +1461,7 @@ function initialize()
 	}
 ]]--
 	create_rounds()
-	round_actual = round_1
+	round_actual = round_2
 	round_actual.sync_round()
 
 	player = Player(round_actual.player_x, round_actual.player_y, sword_init)
@@ -1515,8 +1515,8 @@ function TIC()
 	print((cam.y % CELL) - CELL, 0, 100)
 ]]--
 
-	--print(player.x, 0, 120)
-	--print(player.y, 0, 130)
+	print(player.x, 0, 120)
+	print(player.y, 0, 130)
 
 	t = t + 1
 end
