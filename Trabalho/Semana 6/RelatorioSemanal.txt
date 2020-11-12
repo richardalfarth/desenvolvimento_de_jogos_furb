@@ -1,0 +1,13 @@
+Relatório semanal
+
+Relatar O QUE FOI FEITO:
+- Otávio está criando os sprites.
+- Richard criou o interior das casas na fase 1.
+- Douglas está ajustando as transições das fases e interior das casas.
+-> Reunião com o professor para mostrar o que já estava sendo feito
+
+
+Relatar QUEM FOI O RESPONSÁVEL
+- Richard responsável pelas fases.
+- Otávio pelos personagens.
+- Douglas pela programação.
