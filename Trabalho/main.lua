@@ -6,26 +6,27 @@
 local CAM_W, CAM_H, CELL, DRAW_X, DRAW_Y = 240, 136, 8, 120, 64
 local CENTER_WIDTH, CENTER_HEIGHT, t = (CAM_W/2-30), (CAM_H/2-18), 0
 local states_enemy = {
-	STOP = "STOP", 
-	PURSUIT = "PURSUIT"
+	STOP = "STOP",
+	PURSUIT = "PURSUIT",
+	NONE = "NONE"
 }
 local tiles = {
-	PLAYER = 260,	
-	BOX = 232, 
-	DOOR = 96,	
-	ENEMY = 292, 
-	ALCOOL = 384, 
+	PLAYER = 260,
+	BOX = 232,
+	DOOR = 96,
+	ENEMY = 292,
+	ALCOOL = 384,
 	MASK = 352,
-	HEART = 360, 
-	NPC = 416,	
-	END_GAME = 1, 
-	HEALTH = 365, 
-	SHIELD = 381,	
+	HEART = 360,
+	NPC = 416,
+	END_GAME = 1,
+	HEALTH = 365,
+	SHIELD = 381,
 	COIN = 416,
-	EMPTY_H_S = 380, 
-	
+	EMPTY_H_S = 380,
+
 	TITLE = 352,
-	TITLE_LENGTH = 12, 
+	TITLE_LENGTH = 12,
 	TITLE_HEIGHT = 4
 }
 local sound_effects = {DOOR = 1, INIT = 3, SWORD = 4, END_GAME = 5}
@@ -33,17 +34,17 @@ local const_direction = {UP = 1, DOWN = 2, LEFT = 3, RIGHT = 4}
 local const_status_door = {CLOSED = 96,	OPENED = 98}
 local constants = {
 	VIEW_ENEMY = 50, SPEED_ENEMY = 0.5,
-	
+
 	ABOUT = "Desenvolvido por Douglas, Richard, Otavio.",
-	SCORE = "Pontos: ", 
+	SCORE = "Pontos: ",
 	COINS_PLAYER = "Moedas: ",
-	
-	ENEMY = "ENEMY", 
-	PLAYER = "PLAYER", 
-	SWORD = "SWORD", 
-	COIN = "COIN", 
+
+	ENEMY = "ENEMY",
+	PLAYER = "PLAYER",
+	SWORD = "SWORD",
+	COIN = "COIN",
 	ALCOOL = "ALCOOL",
-	MASK = "MASK", 
+	MASK = "MASK",
 	HEART = "HEART",
 	NPC = "NPC",
 	BOX = "BOX",
@@ -53,10 +54,12 @@ local constants = {
 }
 local player, window, end_game, dialog, dialog_pos, text_pos, menu = {}, {}, {}, nil, 1, 1, {item = 0}
 local step_actual, step_1, step_2, step_3, step_4, step_5 = {}, {}, {}, {}, {}, {}
+local end_game = nil
+
+local round = math.floor
 
 function is_collision_objects(object_a, object_b)
-	return math.abs(object_a.x - object_b.x) < CELL
-		and math.abs(object_a.y - object_b.y) < CELL
+	return math.abs(math.floor(object_a.x-object_b.x)) < CELL	and math.abs(math.floor(object_a.y-object_b.y)) < CELL
 end
 
 function start_dialog()
@@ -77,7 +80,7 @@ function start_dialog()
 		  rect(5, 105, 230, 30, 5)
 			rectb(5, 105, 230, 30, 15)
 		  print(string.sub(str, 1, text_pos), 10, 110, 15, false, 1, true)
-			
+
 			if text_pos < len and t%4 == 0 then text_pos = text_pos+1 end
 		else
 		  dialog_pos = 1
@@ -109,9 +112,6 @@ end
 
 function check_collision_objects(personal, newPosition, time)
 	if personal.tag == constants.PLAYER then
-		for _, npc in pairs(step_actual.Npcs) do
-			if is_collision_objects(newPosition, npc) then return npc.make_collision_npc_with_player() end
-		end
 		for _, box in pairs(step_actual.Boxes) do
 			if is_collision_objects(newPosition, box) then return box.make_collision_box_with_player(time) end
 		end
@@ -123,12 +123,19 @@ function check_collision_objects(personal, newPosition, time)
 		end
 		for i, alcool in pairs(step_actual.Alcools) do
 			if is_collision_objects(newPosition, alcool) then return alcool.make_collision_alcool_with_player(i) end
-		end	
+		end
 		for i, heart in pairs(step_actual.Hearts) do
 			if is_collision_objects(newPosition, heart) then return heart.make_collision_heart_with_player(i) end
-		end	
+		end
 		for i, mask in pairs(step_actual.Masks) do
 			if is_collision_objects(newPosition, mask) then return mask.make_collision_mask_with_player(i) end
+		end
+	end
+
+	for _, npc in pairs(step_actual.Npcs) do
+		if is_collision_objects(newPosition, npc) then
+			if personal.tag == constants.PLAYER then return npc.make_collision_npc_with_player() 
+			elseif personal.tag == constants.SWORD then return npc.make_collision_npc_with_sword() end
 		end
 	end
 
@@ -143,24 +150,40 @@ function check_collision_objects(personal, newPosition, time)
 		return step_actual.update_step()
 	end
 
-	if step_actual.tag == constants.STEP_5 and is_collision_objects(newPosition, end_game) then
+	if step_actual.tag == constants.STEP_5 and end_game ~= nil and is_collision_objects(newPosition, end_game) then
 		return end_game.make_collision()
 	end
 
 	return false
 end
 
-function distancy(e, p) return math.max(math.abs(e.x-p.x), math.abs(e.y-p.y)) end
-function lerp(a, b, q) return (1 - q) * a + q * b end
+function distancy(e, p)
+	return math.max(math.abs(e.x-p.x), math.abs(e.y-p.y))
+end
+
+function lerp(a, b, q)
+	return (1 - q) * a + q * b
+end
 
 -- Base class --
 local function Base()
 	local self = {
-		tag = "", sprite = nil, x = 0, y = 0, background = 6,
-		direction = const_direction.up, collided = false, visible = false,
-		timeout = 0, dx = 0, dy = 0, 
-		tl = {x = 0, y = 0}, tr = {x = 0, y = 0},	bl = {x = 0, y = 0},
-		br = {x = 0, y = 0}, new_position = {}
+		tag = "",
+		sprite = nil,
+		x = 0,
+		y = 0,
+		background = 6,
+		direction = const_direction.up,
+		collided = false,
+		visible = false,
+		timeout = 0,
+		dx = 0,
+		dy = 0,
+		tl = {x=0, y=0},
+		tr = {x=0, y=0},
+		bl = {x=0, y=0},
+		br = {x=0, y=0},
+		new_position = {}
 	}
 
 	function self.is_collision(point)
@@ -177,7 +200,9 @@ local function Base()
 		self.new_position.x = personal.x+delta.x
 		self.new_position.y = personal.y+delta.y
 
-		if check_collision_objects(personal, self.new_position, time) then return false end
+		if check_collision_objects(personal, self.new_position, time) then
+			return false
+		end
 
 		self.tl.x = personal.x-7+delta.x
 		self.tl.y = personal.y-8+delta.y
@@ -188,9 +213,12 @@ local function Base()
 		self.bl.x = personal.x-7+delta.x
 		self.bl.y = personal.y+7+delta.y
 
-		if not self.is_collision(self.tl) and not self.is_collision(self.tr)
-		and not self.is_collision(self.br) and not self.is_collision(self.bl) then
-			if personal.curAnim	and personal.curAnim.ended then
+		if not self.is_collision(self.tl)
+		and not self.is_collision(self.tr)
+		and not self.is_collision(self.br)
+		and not self.is_collision(self.bl) then
+			if personal.curAnim
+			and personal.curAnim.ended then
 				personal.curAnim.reset()
 			end
 
@@ -202,22 +230,34 @@ local function Base()
 
 	function self.draw()
 		if self.visible then
-			local block_x, block_y = cam.x+self.x, cam.y+self.y
+			local block_x, block_y = round(cam.x+self.x), round(cam.y+self.y)
 
 			spr(self.sprite, block_x, block_y, self.background, 1, 0, 0, 2, 2)
 		end
 	end
 
-	function self.update(time) return true end
+	function self.update(time)
+		return true
+	end
 
-	function self.reset()	self.collided = false end
+	function self.reset()
+		self.collided = false
+	end
 
 	return self
 end
 
 -- Animation class --
 local function Anim(span, frames, loop)
-	local self = {span = span, indx = 0, frame = nil, frames = frames, loop = loop, tick = 0, ended = false}
+	local self = {
+		span = span,
+		indx = 0,
+		frame = nil,
+		frames = frames,
+		loop = loop,
+		tick = 0,
+		ended = false
+	}
 
 	function self.update(time)
 		if time >= self.tick and #self.frames > 0 then
@@ -235,7 +275,9 @@ local function Anim(span, frames, loop)
 		end
 	end
 
-	function self.random_indx() self.indx = math.random(#self.frames) end
+	function self.random_indx()
+		self.indx = math.random(#self.frames)
+	end
 
 	function self.reset()
 		self.indx = 0
@@ -285,25 +327,30 @@ local function Door(x, y, player_x, player_y)
 	self.y = y
 	self.player_x = player_x
 	self.player_y = player_y
-	self.anim = Anim(5, {160, 162}, false)
 	self.visible = true
 
 	function self.update(time)
 		if self.collided then
-			self.anim.update(time)
-			self.sprite = self.anim.frame
-
-			if self.anim.ended then
-				window = Window.TRANSACTION_ROUND
-				self.home()
-			end
+			window = Window.TRANSACTION_ROUND
+			self.home()
 		end
 
 		return true
 	end
 
+	function self.draw()
+		if self.collided then return end
+	end
+
 	function self.make_collision_door_with_player()
+		local pos_x, pos_y = (self.x/CELL)+(CELL*2), (self.y/CELL)+(CELL+1)
 		self.collided = true
+
+		mset(pos_x-1, pos_y-1, 102)
+		mset(pos_x, pos_y-1, 103)
+		mset(pos_x-1, pos_y, 118)
+		mset(pos_x, pos_y, 119)
+
 		return true
 	end
 
@@ -452,17 +499,20 @@ local function Enemy(x, y)
 	self.dx = 0
 	self.dy = 0
 	self.anims = {
-		Anim(10, {288, 290}, false), Anim(10, {292, 294}, false),
-		Anim(10, {296, 298}, false), Anim(10, {300, 302}, false)
+		Anim(10, {288, 290}, false),
+		Anim(10, {292, 294}, false),
+		Anim(10, {296, 298}, false),
+		Anim(10, {300, 302}, false)
 	}
 	self.curAnim = nil
+	self.state = states_enemy.NONE
 	self.visible = true
 
 	function self.update(time)
 		if distancy(self, player) < constants.VIEW_ENEMY
-		and not self.check_water(player.tl) and not self.check_water(player.tr)
 		and not self.check_water(player.bl) and not self.check_water(player.br) then
 			self.state = states_enemy.PURSUIT
+			static = false
 		else
 			self.state = states_enemy.STOP
 		end
@@ -470,22 +520,28 @@ local function Enemy(x, y)
 		if self.state == states_enemy.PURSUIT then
 			self.dx, self.dy = 0, 0
 
-			if player.y > self.y then
+			if round(player.y) > round(self.y) then
 				self.dy = constants.SPEED_ENEMY
-				if player.x == self.x then self.direction = const_direction.DOWN end
-			elseif player.y < self.y then
+
+				if round(player.x) == round(self.x) then
+					self.direction = const_direction.DOWN
+				end
+			elseif round(player.y) < round(self.y) then
 				self.dy = -constants.SPEED_ENEMY
-				if player.x == self.x then self.direction = const_direction.UP end
+
+				if round(player.x) == round(self.x) then
+					self.direction = const_direction.UP
+				end
 			end
 
 			self.move(self, {x = self.dx, y = self.dy}, self.direction, time)
 
 			self.dx, self.dy = 0, 0
 
-			if player.x > self.x then
+			if round(player.x) > round(self.x) then
 				self.dx = constants.SPEED_ENEMY
 				self.direction = const_direction.RIGHT
-			elseif player.x < self.x then
+			elseif round(player.x) < round(self.x) then
 				self.dx = -constants.SPEED_ENEMY
 				self.direction = const_direction.LEFT
 			end
@@ -508,8 +564,11 @@ local function Enemy(x, y)
 	function self.make_collision_enemy_with_player(index)
 		player.damaged = true
 
-		if player.shield > 0 then player.shield = player.shield - 1
-		elseif player.health > 0 then player.health = player.health - 1 end
+		if player.shield > 0 then
+			player.shield = player.shield - 1
+		elseif player.health > 0 then
+			player.health = player.health - 1
+		end
 
 		if player.shield == 0 and player.health == 0 then
 			window = Window.GAME_OVER
@@ -535,14 +594,27 @@ local function Sword(x, y)
 		Anim(10, {322, 324}, false), Anim(10, {334, 328}, false),
 		Anim(10, {322, 320}, false), Anim(10, {330, 332}, false)
 	}
-	self.delta = {{x = 0, y = - 10}, {x = 0, y = 10}, {x = -10, y = 0}, {x = 10, y = 0}}
+	self.delta = {{x=0, y=-10}, {x=0, y=10}, {x=-10, y=0}, {x=10, y=0}}
 	self.curAnim = nil
 	self.visible = false
 	self.timeout = 0
 
+	function self.draw()
+		if player.damaged
+		and (time()//250) % 2 ~= 0 then
+			return
+		end
+
+		if self.visible then
+			local block_x, block_y = round(cam.x + self.x), round(cam.y + self.y)
+			spr(self.sprite, block_x,	block_y, self.background, 1, 0, 0, 2, 2)
+		end
+	end
+
 	function self.update(time)
 		if player.direction then
-			self.x, self.y = player.x+self.delta[player.direction].x, player.y+self.delta[player.direction].y
+			self.x = player.x+self.delta[player.direction].x
+			self.y = player.y+self.delta[player.direction].y
 			self.curAnim = self.anims[player.direction]
 			self.curAnim.update(time)
 			self.sprite = self.curAnim.frame
@@ -555,9 +627,15 @@ local function Sword(x, y)
 
 		if self.visible then
 			check_collision_objects(self, self, time)
-			if self.curAnim and self.curAnim.ended then self.curAnim.reset() end
-			self.timeout = self.timeout-1
-			if self.timeout <= 0 then self.visible = false end
+
+			if self.curAnim and self.curAnim.ended then
+				self.curAnim.reset()
+			end
+
+			self.timeout = self.timeout - 1
+			if self.timeout <= 0 then
+				self.visible = false
+			end
 		end
 	end
 
@@ -582,15 +660,24 @@ local function Step(x,	y,	player_x,	player_y,	map, tag)
 		step_actual = self.next_round
 
 		if step_actual.tag == constants.STEP_5 then
-			end_game = {sprite = tiles.END_GAME, x =	233, y = 304, background = 1, visible = true, make_collision = final_match}
+			end_game = {
+				sprite = tiles.END_GAME,
+				x =	233,
+				y = 304,
+				background = 1,
+				visible = true,
+				make_collision = final_match
+			}
 		end
-		
+
 		player.x, player.y = step_actual.player_x, step_actual.player_y
 		constants.SPEED_ENEMY = constants.SPEED_ENEMY+0.1
 		self.sync_step()
 	end
 
-	function self.sync_step() sync(4, step_actual.map) end
+	function self.sync_step() 
+		sync(4, step_actual.map) 
+	end
 
 	function self.draw()
 		for _, box in pairs(self.Boxes) do box.draw() end
@@ -646,7 +733,16 @@ local function NPC(x, y, dialog_npc)
 	end
 
 	function self.make_collision_npc_with_player()
-		if btn(5) then dialog = self.dialog end
+		if btn(5) then 
+			dialog = self.dialog 
+		end
+
+		return true
+	end
+
+	function self.make_collision_npc_with_sword()
+		window = Window.NPC_DIED
+		
 		return true
 	end
 
@@ -692,17 +788,7 @@ local function Player(x, y, sword)
 			self.timeout = 30
 		end
 
-		spr(
-			self.sprite,
-			block_x,
-			block_y,
-			self.background, -- cor de fundo
-			1, -- escala
-			0, -- espelhar
-			0, -- rotacionar
-			2, -- quantidade de blocos direita
-			2 -- quantidade de blocos esquerda
-		)
+		spr(self.sprite, block_x,	block_y, self.background, 1, 0, 0, 2, 2)
 	end
 
 	function self.update(time)
@@ -744,6 +830,7 @@ local function DisplayHUD()
 	local h_s = 0
 
 	print(constants.SCORE..player.score, 0, 0)
+
 	for _ = 1, player.health do	h_s = h_s+1
 		spr(tiles.HEALTH,	CELL*(h_s - 1), CELL, 14)
 	end
@@ -796,9 +883,16 @@ local function draw_menu()
 
 	spr(448, 75, 30, 0,	1, 0, 0, 10, 10)
 
-	if (time()//800) % 2 == 0 then print("Pressione [z]", 80, 90)	end
+	if (time()//800) % 2 == 0 then print("Press [z]", 90, 90)	end
 
 	print(constants.ABOUT, 5, 128)
+end
+
+local function draw_help()
+	if btn(6) then
+		print("Z - Atacar", 80, 90)
+		print("X - Interagir", 80, 100)
+	end
 end
 
 local function draw_game()
@@ -810,18 +904,17 @@ local function draw_game()
 	player.draw()
 	start_dialog()
 	DisplayHUD()
+	draw_help()
 end
 
 function initialize()
 	cam = {x = 0, y = 0}
 
-	local sword_init = Sword(0, 0)
-
 	create_rounds()
 	step_actual = step_1
 	step_actual.sync_step()
 
-	player = Player(step_actual.player_x, step_actual.player_y, sword_init)
+	player = Player(step_actual.player_x, step_actual.player_y, Sword(0, 0))
 end
 
 local function update_window_end_game(time)
@@ -833,7 +926,7 @@ end
 
 local function draw_end_game()
 	cls()
-	print("Você conseguiu escapar!", 56, 40)
+	print("Voce conseguiu escapar!", 56, 40)
 	print("Pontos ganhos: "..player.score, 40, 65)
 	print("Press [z] para reiniciar o jogo", 20, 805)
 end
@@ -887,10 +980,31 @@ end
 local function draw_game_over()
 	cls()
 	print("Voce morreu!", CENTER_WIDTH, CAM_H/2-18)
+	print("Pontos: "..player.score, CENTER_WIDTH+5, CENTER_HEIGHT+10)
+
+	print("Press [x] reiniciar", 70, CENTER_HEIGHT+30)
+	print("Press [z] ultimo ponto de controle", 25, CENTER_HEIGHT+40)
+end
+
+local function draw_npc_died()
+	cls()
+	print("Voce matou um aliado!", CENTER_WIDTH-30, CAM_H/2-18)
 	print("Pontos: "..player.score, CENTER_WIDTH+10, CENTER_HEIGHT+10)
 
-	print("Pressione [x] para reiniciar", 20, CENTER_HEIGHT+30)
-	print("Pressione [z] para ultimo ponto de controle", 10, CENTER_HEIGHT+40)
+	print("Press [z] reiniciar", 80, CENTER_HEIGHT+30)
+end
+
+local function update_npc_died()
+	if btnp(4) then
+		initialize()
+
+		step_actual = step_1
+		player.x = step_actual.player_x
+		player.y = step_actual.player_y
+		step_actual.sync_step()
+
+		window = Window.GAME
+	end
 end
 
 function TIC()
@@ -913,49 +1027,34 @@ function create_rounds()
 
 	step_1 = Step(0, 0, -109, 936, 0, constants.STEP_1)
 	step_1.Alcools = {
-		Alcool(111, 99), 
-		Alcool(42, 14),
-		Alcool(68, 27),
-		Alcool(73, 67),
-		Alcool(97, 76), 
-		Alcool(169, 74),
-		Alcool(341, 3)
+		Alcool(376, 669),
+		Alcool(-97, 174),
+		Alcool(979, 173),
+		Alcool(-111, 999),
+		Alcool(1527, 39)
 	}
 	step_1.Hearts = {
-		Heart(038, 11), 
-		Heart(097, 44),
-		Heart(09, 63), 
-		Heart(110, 72),
-		Heart(528, 58), 
-		Heart(29, 92),
-		Heart(342, 50), 
-		Heart(527, 85),
-		Heart(425, 2), 
-		Heart(78, 9)
+		Heart(329, 902),
+		Heart(568, 286),
+		Heart(1426, -1),
+		Heart(1529, 855)
 	}
 	step_1.Masks = {
-		Mask(97, 9),	
-		Mask(2, 43),
-		Mask(438, 54), 
-		Mask(526, 20),
-		Mask(107, 92), 
-		Mask(417, 85),
-		Mask(425, 0)
+		Mask(297, 90),
+		Mask(1174, 637),
+		Mask(91, 491)
 	}
 	step_1.Boxes = {
-		Box(110, 99), 
-		Box(65, 8),
-		Box(28, 8), 
-		Box(44, 8),
-		Box(4, 75), 
-		Box(177, 33),
-		Box(5, 67), 
-		Box(525, 50),
-		Box(525, 50), 
-		Box(113, 66),
-		Box(162, 66), 
-		Box(441, 73),
-		Box(528, 8)
+		Box(94, 764),
+		Box(267, 90),
+		Box(330, 90),
+		Box(1041, 99),
+		Box(610, 627),
+		Box(1530, 270),
+		Box(1105, 953),
+		Box(1530, 584),
+		Box(1530, 498),
+		Box(1098, 835)
 	}
 	step_1.Enemies = {
 		Enemy(96, 896), 
@@ -1024,7 +1123,8 @@ function create_rounds()
 		Enemy(1455, 21), 
 		Enemy(1527, 37),	
 		Enemy(1524, -38),
-		Enemy(1356, -35)
+		Enemy(1356, -35),
+		Enemy(620, 131)
 	}
 	step_1.Doors = {
 		Door(761,	952, 705, 93),	
@@ -1050,7 +1150,7 @@ function create_rounds()
 		Door(-64,	665, 1425, -48),	
 		Door(1425, -63, -64, 680)
 	}
-	step_1.coins = {
+	step_1.Coins = {
 		Coin(1, 936), 
 		Coin(-110, 830), 
 		Coin(336, 864),
@@ -1074,9 +1174,14 @@ function create_rounds()
 		Coin(378, 586),
 		Coin(49, 493), 
 		Coin(1412, 230), 
-		Coin(1341, 855)
+		Coin(1341, 855),
+		Coin(1097, 445),
+		Coin(621, 174),
+		Coin(1527, -35)
 	}
-	step_1.npcs = {NPC(20, 936, dialog_npc)}
+	step_1.Npcs = {
+		NPC(20, 936, dialog_npc)
+	}
 
 	step_2 = Step(-56, 576, -112, -8, 1, constants.STEP_2)
 	step_2.Alcools = {
@@ -2051,6 +2156,7 @@ Window = {
 	GAME = {update = update_game, draw = draw_game},
 	TRANSACTION_ROUND = {update = update_transaction_round,	draw = draw_transaction},
 	GAME_OVER = {update = update_game_over, draw = draw_game_over},
+	NPC_DIED = {update = update_npc_died, draw = draw_npc_died},
 	END_GAME = {update = update_window_end_game, draw = draw_end_game}
 }
 
