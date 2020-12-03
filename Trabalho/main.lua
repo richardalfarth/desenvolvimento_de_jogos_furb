@@ -58,11 +58,11 @@ local end_game = nil
 
 local round = math.floor
 
-function is_collision_objects(object_a, object_b)
+local function is_collision_objects(object_a, object_b)
 	return math.abs(math.floor(object_a.x-object_b.x)) < CELL	and math.abs(math.floor(object_a.y-object_b.y)) < CELL
 end
 
-function start_dialog()
+local function start_dialog()
 	if dialog ~= nil and dialog[dialog_pos] ~= nil then
 		local str = dialog[dialog_pos]
 		local len = string.len(str)
@@ -95,22 +95,30 @@ function start_dialog()
 
 			if btnp(4) then
 				if menu.item == 0 then
-					if player.coins - 10 >= 0 then
+					if player.coins - 10 >= 0 and player.shield + 1 <= player.max_shield then
+						if player.shield + 2 <= player.max_shield then
+							player.shield = player.shield + 2
+						else
+							player.shield = player.shield + 1
+						end
 						player.coins = player.coins - 10
-						player.shield = player.shield + 2
 					end
+
+					player.buy_mask = true
 				elseif menu.item == 1 then
-					if player.coins - 5 >= 0 then
-						player.coins = player.coins - 5
+					if player.coins - 5 >= 0 and player.health + 1 <= player.max_health then
 						player.health = player.health + 1
+						player.coins = player.coins - 5
 					end
+
+					player.buy_life = true
 				end
 			end
 		end
 	end
 end
 
-function check_collision_objects(personal, newPosition, time)
+local function check_collision_objects(personal, newPosition, time)
 	if personal.tag == constants.PLAYER then
 		for _, box in pairs(step_actual.Boxes) do
 			if is_collision_objects(newPosition, box) then return box.make_collision_box_with_player(time) end
@@ -157,11 +165,11 @@ function check_collision_objects(personal, newPosition, time)
 	return false
 end
 
-function distancy(e, p)
+local function distancy(e, p)
 	return math.max(math.abs(e.x-p.x), math.abs(e.y-p.y))
 end
 
-function lerp(a, b, q)
+local function lerp(a, b, q)
 	return (1 - q) * a + q * b
 end
 
@@ -409,7 +417,7 @@ local function Alcool(x, y)
 	end
 
 	function self.make_collision_alcool_with_player(index)
-		if player.shield + 1 <= player.maxShield then
+		if player.shield + 1 <= player.max_shield then
 			player.shield = player.shield+1
 			table.remove(step_actual.Alcools, index)
 
@@ -441,7 +449,7 @@ local function Heart(x, y)
 	end
 
 	function self.make_collision_heart_with_player(index)
-		if player.health + 1 <= player.maxHealth then
+		if player.health + 1 <= player.max_health then
 			player.health = player.health + 1
 			table.remove(step_actual.Hearts, index)
 
@@ -473,8 +481,8 @@ local function Mask(x, y)
 	end
 
 	function self.make_collision_mask_with_player(index)
-		if player.shield + 1 <= player.maxShield then
-			if player.shield + 2 <= player.maxShield then player.shield = player.shield + 2
+		if player.shield + 1 <= player.max_shield then
+			if player.shield + 2 <= player.max_shield then player.shield = player.shield + 2
 			else player.shield = player.shield + 1 end
 			table.remove(step_actual.Masks, index)
 
@@ -675,8 +683,8 @@ local function Step(x,	y,	player_x,	player_y,	map, tag)
 		self.sync_step()
 	end
 
-	function self.sync_step() 
-		sync(4, step_actual.map) 
+	function self.sync_step()
+		sync(4, step_actual.map)
 	end
 
 	function self.draw()
@@ -733,8 +741,8 @@ local function NPC(x, y, dialog_npc)
 	end
 
 	function self.make_collision_npc_with_player()
-		if btn(5) then 
-			dialog = self.dialog 
+		if btn(5) then
+			dialog = self.dialog
 		end
 
 		return true
@@ -742,7 +750,7 @@ local function NPC(x, y, dialog_npc)
 
 	function self.make_collision_npc_with_sword()
 		window = Window.NPC_DIED
-		
+
 		return true
 	end
 
@@ -759,9 +767,9 @@ local function Player(x, y, sword)
 	self.background = 6
 	self.sword = sword
 	self.health = 3
-	self.maxHealth = 8
+	self.max_health = 8
 	self.shield = 0
-	self.maxShield = 5
+	self.max_shield = 5
 	self.coins = 0
 	self.score = 0
 	self.anims = {
@@ -773,7 +781,11 @@ local function Player(x, y, sword)
 	self.delta = {{x = 0, y = -1}, {x = 0, y = 1}, {x = -1, y = 0}, {x = 1, y = 0}}
 	self.curAnim = nil
 	self.damaged = false
+	self.buy_life = false
+	self.buy_mask = false
 	self.timeout = 30
+	self.buy_life_t = 30
+	self.buy_mask_t = 30
 
 	function self.draw()
 		player.sword.draw()
@@ -826,25 +838,65 @@ local function Player(x, y, sword)
 	return self
 end
 
+local function draw_life(h_s_p)
+	if player.buy_life and (time()//250) % 2 ~= 0 and player.buy_life_t > 0 then
+		player.buy_life_t = player.buy_life_t - 1
+		return
+	elseif player.buy_life_t == 0 then
+		player.buy_life = false
+		player.buy_life_t = 30
+	end
+
+	for _ = 1, player.health do
+		h_s_p = h_s_p+1
+		spr(tiles.HEALTH,	CELL*(h_s_p - 1), CELL, 14)
+	end
+
+	for _ = 1, player.max_health - player.health do
+		h_s_p = h_s_p+1
+		spr(tiles.EMPTY_H_S, CELL*(h_s_p - 1), CELL, 14)
+	end
+end
+
+local function draw_shield(h_s_p)
+	if player.buy_mask and (time()//250) % 2 ~= 0 and player.buy_mask_t > 0 then
+		player.buy_mask_t = player.buy_mask_t - 1
+		return
+	elseif player.buy_mask_t == 0 then
+		player.buy_mask = false
+		player.buy_mask_t = 30
+	end
+
+	for i = 1, player.shield do
+		h_s_p = h_s_p+1
+		spr(tiles.SHIELD,	CELL*(i - 1),	CELL*2, 14)
+	end
+	for _ = 1, player.max_shield - player.shield do
+		h_s_p = h_s_p+1
+		spr(tiles.EMPTY_H_S, CELL*(h_s_p - 1), CELL*2, 14)
+	end
+end
+
 local function DisplayHUD()
-	local h_s = 0
+	local h_s, step = 0
 
 	print(constants.SCORE..player.score, 0, 0)
 
-	for _ = 1, player.health do	h_s = h_s+1
-		spr(tiles.HEALTH,	CELL*(h_s - 1), CELL, 14)
-	end
-	for _ = 1, player.maxHealth - player.health do h_s = h_s + 1
-		spr(tiles.EMPTY_H_S, CELL*(h_s - 1), CELL, 14)
-	end
+	if step_actual.tag == constants.STEP_1 then step = 1
+	elseif step_actual.tag == constants.STEP_2 then step = 2
+	elseif step_actual.tag == constants.STEP_3 then step = 3
+	elseif step_actual.tag == constants.STEP_4 then step = 4
+	elseif step_actual.tag == constants.STEP_5 then step = 5 end
+
+	print("Fase: "..step, (CAM_W/2)-CELL, 0)
+
+	draw_life(h_s)
 	h_s = 0
-	for i = 1, player.shield do h_s = h_s + 1
-		spr(tiles.SHIELD,	CELL*(i - 1),	CELL*2, 14)
+	draw_shield(h_s)
+
+	if player.coins > 0 then
+		print(constants.COINS_PLAYER..player.coins, CAM_W - (CELL * 7), 0)
 	end
-	for _ = 1, player.maxShield - player.shield do h_s = h_s + 1
-		spr(tiles.EMPTY_H_S, CELL*(h_s - 1), CELL*2, 14)
-	end
-	if player.coins > 0 then print(constants.COINS_PLAYER..player.coins, CAM_W - (CELL * 7), 0)	end
 end
 
 local function draw_map()
@@ -940,7 +992,7 @@ local function draw_transaction()
 		return
 	elseif step_actual.timeout > 0 then
 		cls()
-		print("Loading..", CAM_W/2-22, CAM_H/2-18)
+		print("Carregando..", CAM_W/2-22, CAM_H/2-18)
 
 		step_actual.timeout = step_actual.timeout - 1
 	elseif step_actual.timeout == 0 then
@@ -1011,8 +1063,8 @@ function TIC()
 	window.update(t)
 	window.draw()
 
-	print(player.x, 0, 120)
-	print(player.y, 0, 130)
+--	print(player.x, 0, 120)
+--	print(player.y, 0, 130)
 
 	t = t + 1
 end
